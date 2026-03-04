@@ -1,0 +1,313 @@
+// ==========================================================
+// PICKLEBALL DOUBLES - Parametric PCSP# Template
+// ==========================================================
+// Sport: Pickleball Doubles (2 vs 2)
+// Teams: Team 1 (T1) vs Team 2 (T2)
+//
+// Scoring Rules:
+//   1. SIDE-OUT SCORING - only the serving team can score
+//   2. TWO SERVERS PER TEAM - Server 1 serves first; if the
+//      serving team loses a rally, Server 2 takes over.
+//      If Server 2's team also loses, it is a side out.
+//   3. OPENING EXCEPTION - the first serving team starts at
+//      Server 2 (only one serve attempt before first side out)
+//   4. Game to 11, win by 2, hard cap at 15
+//   5. Single serve attempt per server - a fault passes to
+//      the next server or causes a side out
+//
+// Point Flow:
+//   SERVE -> RETURN -> THIRD SHOT -> RALLY
+//
+// Serve placements: DEEP (baseline), WIDE (sideline), MID (body)
+// Third shot: DROP (soft dink into kitchen) vs DRIVE (hard topspin)
+//
+// NOTE: For every 2-outcome pcase, we define BOTH the success
+// and failure weight as separate constants, because PAT's
+// integer-weight pcase does not support expressions or default.
+// The Python injector must keep each pair summing to 100.
+//
+// NOTE: Skills are modelled per-team (not per-individual).
+// Each team's parameters represent the combined ability of
+// that pair.  To model individual server differences, split
+// T1 serve params into T1S1_ / T1S2_ variants (not done here).
+// ==========================================================
+
+
+// -- Strategy: serve placement distribution (each sums to 100) --
+#define T1_SERVE_DEEP_PCT 40;
+#define T1_SERVE_WIDE_PCT 35;
+#define T1_SERVE_MID_PCT 25;
+
+#define T2_SERVE_DEEP_PCT 35;
+#define T2_SERVE_WIDE_PCT 40;
+#define T2_SERVE_MID_PCT 25;
+
+// -- Strategy: third-shot choice (each pair sums to 100) --
+#define T1_THIRD_DROP_PCT 55;
+#define T1_THIRD_DRIVE_PCT 45;
+
+#define T2_THIRD_DROP_PCT 50;
+#define T2_THIRD_DRIVE_PCT 50;
+
+// -- Skill: serve-in rate + complement (each pair sums to 100) --
+#define T1_SERVE_IN_DEEP 90;
+#define T1_SERVE_FAULT_DEEP 10;
+
+#define T1_SERVE_IN_WIDE 87;
+#define T1_SERVE_FAULT_WIDE 13;
+
+#define T1_SERVE_IN_MID 93;
+#define T1_SERVE_FAULT_MID 7;
+
+#define T2_SERVE_IN_DEEP 88;
+#define T2_SERVE_FAULT_DEEP 12;
+
+#define T2_SERVE_IN_WIDE 85;
+#define T2_SERVE_FAULT_WIDE 15;
+
+#define T2_SERVE_IN_MID 91;
+#define T2_SERVE_FAULT_MID 9;
+
+// -- Skill: return success + complement (each pair sums to 100) --
+#define T1_RET_VS_DEEP 78;
+#define T1_RET_ERR_DEEP 22;
+
+#define T1_RET_VS_WIDE 70;
+#define T1_RET_ERR_WIDE 30;
+
+#define T1_RET_VS_MID 82;
+#define T1_RET_ERR_MID 18;
+
+#define T2_RET_VS_DEEP 75;
+#define T2_RET_ERR_DEEP 25;
+
+#define T2_RET_VS_WIDE 68;
+#define T2_RET_ERR_WIDE 32;
+
+#define T2_RET_VS_MID 80;
+#define T2_RET_ERR_MID 20;
+
+// -- Skill: third-shot success + complement (each pair sums to 100) --
+#define T1_DROP_IN 65;
+#define T1_DROP_ERR 35;
+
+#define T1_DRIVE_IN 70;
+#define T1_DRIVE_ERR 30;
+
+#define T2_DROP_IN 60;
+#define T2_DROP_ERR 40;
+
+#define T2_DRIVE_IN 67;
+#define T2_DRIVE_ERR 33;
+
+// -- Skill: rally win (pair sums to 100) --
+#define T1_RALLY_WIN 52;
+#define T2_RALLY_WIN 48;
+
+// -- Game settings --
+#define TARGET 11;
+#define MAXSCORE 15;
+
+
+// ==========================================================
+// STATE VARIABLES
+// ==========================================================
+var t1Score = 0;
+var t2Score = 0;
+var servingTeam = 1;   // which team is serving: 1 or 2
+var serverNum = 2;     // which server on that team: 1 or 2
+                       // starts at 2 for the opening exception
+var winner = 0;
+
+
+// ==========================================================
+// MAIN GAME
+// ==========================================================
+
+PickleballGame = CheckScore;
+
+CheckScore =
+    if (t1Score >= TARGET && t1Score - t2Score >= 2) {
+        team1Win{winner = 1} -> Skip
+    } else {
+        if (t2Score >= TARGET && t2Score - t1Score >= 2) {
+            team2Win{winner = 2} -> Skip
+        } else {
+            if (t1Score >= MAXSCORE) {
+                team1Win{winner = 1} -> Skip
+            } else {
+                if (t2Score >= MAXSCORE) {
+                    team2Win{winner = 2} -> Skip
+                } else {
+                    if (servingTeam == 1) { T1Serves } else { T2Serves }
+                }
+            }
+        }
+    };
+
+
+// ==========================================================
+// SERVER SWITCH / SIDE-OUT LOGIC
+// ==========================================================
+// When the serving team LOSES a rally:
+//   - If serverNum == 1: pass to Server 2 on same team
+//   - If serverNum == 2: side out to the other team at Server 1
+//
+// When the serving team WINS a rally:
+//   - Score +1, same server continues
+
+T1LosesRally =
+    if (serverNum == 1) {
+        t1_second_server{serverNum = 2} -> CheckScore
+    } else {
+        side_out{servingTeam = 2; serverNum = 1} -> CheckScore
+    };
+
+T2LosesRally =
+    if (serverNum == 1) {
+        t2_second_server{serverNum = 2} -> CheckScore
+    } else {
+        side_out{servingTeam = 1; serverNum = 1} -> CheckScore
+    };
+
+
+// ==========================================================
+// TEAM 1 SERVING
+// ==========================================================
+
+T1Serves = pcase {
+    T1_SERVE_DEEP_PCT : T1ServeDeep
+    T1_SERVE_WIDE_PCT : T1ServeWide
+    T1_SERVE_MID_PCT  : T1ServeMid
+};
+
+T1ServeDeep = pcase {
+    T1_SERVE_IN_DEEP   : t1_serve_deep_in -> T2ReturnsDeep
+    T1_SERVE_FAULT_DEEP : t1_serve_fault -> T1LosesRally
+};
+
+T1ServeWide = pcase {
+    T1_SERVE_IN_WIDE   : t1_serve_wide_in -> T2ReturnsWide
+    T1_SERVE_FAULT_WIDE : t1_serve_fault -> T1LosesRally
+};
+
+T1ServeMid = pcase {
+    T1_SERVE_IN_MID   : t1_serve_mid_in -> T2ReturnsMid
+    T1_SERVE_FAULT_MID : t1_serve_fault -> T1LosesRally
+};
+
+T2ReturnsDeep = pcase {
+    T2_RET_VS_DEEP  : t2_return_ok -> T1ThirdShot
+    T2_RET_ERR_DEEP : t2_return_err -> T1ScoresPoint
+};
+
+T2ReturnsWide = pcase {
+    T2_RET_VS_WIDE  : t2_return_ok -> T1ThirdShot
+    T2_RET_ERR_WIDE : t2_return_err -> T1ScoresPoint
+};
+
+T2ReturnsMid = pcase {
+    T2_RET_VS_MID  : t2_return_ok -> T1ThirdShot
+    T2_RET_ERR_MID : t2_return_err -> T1ScoresPoint
+};
+
+T1ThirdShot = pcase {
+    T1_THIRD_DROP_PCT  : T1ThirdDrop
+    T1_THIRD_DRIVE_PCT : T1ThirdDrive
+};
+
+T1ThirdDrop = pcase {
+    T1_DROP_IN  : t1_drop_ok -> RallyT1Served
+    T1_DROP_ERR : t1_drop_err -> T1LosesRally
+};
+
+T1ThirdDrive = pcase {
+    T1_DRIVE_IN  : t1_drive_ok -> RallyT1Served
+    T1_DRIVE_ERR : t1_drive_err -> T1LosesRally
+};
+
+RallyT1Served = pcase {
+    T1_RALLY_WIN : t1_wins_rally -> T1ScoresPoint
+    T2_RALLY_WIN : t2_wins_rally -> T1LosesRally
+};
+
+
+// ==========================================================
+// TEAM 2 SERVING
+// ==========================================================
+
+T2Serves = pcase {
+    T2_SERVE_DEEP_PCT : T2ServeDeep
+    T2_SERVE_WIDE_PCT : T2ServeWide
+    T2_SERVE_MID_PCT  : T2ServeMid
+};
+
+T2ServeDeep = pcase {
+    T2_SERVE_IN_DEEP   : t2_serve_deep_in -> T1ReturnsDeep
+    T2_SERVE_FAULT_DEEP : t2_serve_fault -> T2LosesRally
+};
+
+T2ServeWide = pcase {
+    T2_SERVE_IN_WIDE   : t2_serve_wide_in -> T1ReturnsWide
+    T2_SERVE_FAULT_WIDE : t2_serve_fault -> T2LosesRally
+};
+
+T2ServeMid = pcase {
+    T2_SERVE_IN_MID   : t2_serve_mid_in -> T1ReturnsMid
+    T2_SERVE_FAULT_MID : t2_serve_fault -> T2LosesRally
+};
+
+T1ReturnsDeep = pcase {
+    T1_RET_VS_DEEP  : t1_return_ok -> T2ThirdShot
+    T1_RET_ERR_DEEP : t1_return_err -> T2ScoresPoint
+};
+
+T1ReturnsWide = pcase {
+    T1_RET_VS_WIDE  : t1_return_ok -> T2ThirdShot
+    T1_RET_ERR_WIDE : t1_return_err -> T2ScoresPoint
+};
+
+T1ReturnsMid = pcase {
+    T1_RET_VS_MID  : t1_return_ok -> T2ThirdShot
+    T1_RET_ERR_MID : t1_return_err -> T2ScoresPoint
+};
+
+T2ThirdShot = pcase {
+    T2_THIRD_DROP_PCT  : T2ThirdDrop
+    T2_THIRD_DRIVE_PCT : T2ThirdDrive
+};
+
+T2ThirdDrop = pcase {
+    T2_DROP_IN  : t2_drop_ok -> RallyT2Served
+    T2_DROP_ERR : t2_drop_err -> T2LosesRally
+};
+
+T2ThirdDrive = pcase {
+    T2_DRIVE_IN  : t2_drive_ok -> RallyT2Served
+    T2_DRIVE_ERR : t2_drive_err -> T2LosesRally
+};
+
+RallyT2Served = pcase {
+    T1_RALLY_WIN : t1_wins_rally -> T2LosesRally
+    T2_RALLY_WIN : t2_wins_rally -> T2ScoresPoint
+};
+
+
+// ==========================================================
+// SCORING (side-out: only serving team scores, server continues)
+// ==========================================================
+
+T1ScoresPoint = t1_scores{t1Score = t1Score + 1} -> CheckScore;
+
+T2ScoresPoint = t2_scores{t2Score = t2Score + 1} -> CheckScore;
+
+
+// ==========================================================
+// ASSERTIONS
+// ==========================================================
+
+#define t1wins (winner == 1);
+#define t2wins (winner == 2);
+
+#assert PickleballGame reaches t1wins with prob;
+#assert PickleballGame reaches t2wins with prob;
