@@ -29,7 +29,9 @@ Pickleball-specific concepts modelled:
   - Rally phase (net play / dinking battle / speed-ups)
 
 Skills are modelled per-TEAM (not per-individual).  Each team's
-parameters represent the combined ability of that pair.
+parameters represent the combined ability of that pair.  To model
+individual server differences, split T1 serve params into T1S1_ /
+T1S2_ variants.
 
 
 ================================================================================
