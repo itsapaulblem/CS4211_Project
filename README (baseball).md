@@ -1,33 +1,68 @@
-# Part A — Baseball At-Bat Parametric PCSP# Model
 
-**File:** `baseball_template.pcsp`
+# Baseball At-Bat Parametric PCSP# Model — Project Status & Workflow
+
+**Key Files:**
+- `baseball_template.pcsp` — Parametric model template (do not edit directly)
+- `auto_update_pcsp.py` — Automates model generation for any pitcher/batter matchup
+- `data_parser.py` — Fetches real Statcast/Bat Tracking data, computes model parameters
+- `matchup.pcsp` — Auto-generated model for a specific matchup (run this in PAT)
+- `data/matchup.json` — Stores parameter sets for matchups
+
+---
+
+## Project Status & Workflow (2026)
+
+**Current State:**
+- The project is fully automated: you can generate a formal PCSP# model for any MLB pitcher/batter matchup using real 2024 Statcast and Bat Tracking data.
+- All model parameters are injected automatically; comments and documentation are consistent across template and generated files.
+- The workflow is robust for most MLB players; missing data is handled gracefully with defaults and warnings.
+- The codebase is ready for demonstration, extension, and team collaboration.
+
+**How to Use:**
+1. **Generate a matchup model:**
+  ```sh
+  python auto_update_pcsp.py "Pitcher Name" "Batter Name"
+  ```
+  Example:
+  ```sh
+  python auto_update_pcsp.py "Gerrit Cole" "Aaron Judge"
+  ```
+  This creates `matchup.pcsp` with all real probabilities and up-to-date comments.
+
+2. **Run the model in PAT:**
+  - Open `matchup.pcsp` in PAT (or your PCSP# toolchain) and run reachability/sensitivity queries as described below.
+
+3. **(Optional) Export parameters for teammates:**
+  - Use `data_parser.py` to export a JSON file for use in other tools:
+    ```sh
+    python -c "import data_parser; data_parser.export_matchup_json('Gerrit Cole', 'Aaron Judge')"
+    ```
 
 ---
 
 ## 1. Overview
 
-This model captures a single baseball **at-bat** (pitcher vs batter) using PAT's probabilistic CSP (PCSP#) language.
+This project models a single baseball **at-bat** (pitcher vs batter) using PAT's probabilistic CSP (PCSP#) language, parameterized by real MLB data. The model is fully automated: you can generate a formal model for any matchup with a single command.
 
 ### Why baseball works as a 1v1 model
 
 Every at-bat in baseball is a self-contained duel between exactly two players. The pitcher choosing what to throw, and the batter reacting. This is the direct analog of a tennis service game or tiebreaker. Although baseball is a team sport, the atomic competitive unit (the at-bat) is purely 1-vs-1 and has a binary outcome: the pitcher gets the batter out, or the batter reaches base.
 
-### Data sources
 
-Baseball Savant has many leaderboards (bat tracking, swing path, exit velocity, pitch movement, pitch tempo, spin direction, etc.). **Most are out of scope.** The model has only 15 independent parameters — all of which can be sourced from **3 places**:
+### Data Sources & Automation
 
-**1. Pitcher's Statcast player page** → Pitch Arsenal section
-- **Usage %** by pitch type → `P_FAST_PCT`, `P_BREAK_PCT`, `P_OFF_PCT`
-- **Zone %** by pitch type → `P_{TYPE}_ZONE` (complement → `P_{TYPE}_MISS`)
+All model parameters are sourced automatically from three public MLB data sources:
 
-**2. Batter's Statcast player page** → Plate Discipline section
-- **Swing %** by pitch type → `B_{TYPE}_SWING` (complement → `B_{TYPE}_TAKE`)
-- **Whiff %** by pitch type → `B_{TYPE}_WHIFF` (complement → `B_{TYPE}_CONTACT`)
+1. **Pitcher's Statcast player page** (Pitch Arsenal section)
+  - **Usage %** by pitch type → `P_FAST_PCT`, `P_BREAK_PCT`, `P_OFF_PCT`
+  - **Zone %** by pitch type → `P_{TYPE}_ZONE` (complement → `P_{TYPE}_MISS`)
+2. **Batter's Statcast player page** (Plate Discipline section)
+  - **Swing %** by pitch type → `B_{TYPE}_SWING` (complement → `B_{TYPE}_TAKE`)
+  - **Whiff %** by pitch type → `B_{TYPE}_WHIFF` (complement → `B_{TYPE}_CONTACT`)
+3. **[Bat Tracking leaderboard — Bat Speed & Contact](https://baseballsavant.mlb.com/leaderboard/bat-tracking)**
+  - **Squared-Up % Contact** by pitch type → used to derive `B_{TYPE}_HIT` / `B_{TYPE}_OUT` / `B_{TYPE}_FOUL`
 
-**3. [Bat Tracking leaderboard — Bat Speed & Contact](https://baseballsavant.mlb.com/leaderboard/bat-tracking)**
-- **Squared-Up % Contact** by pitch type → used to derive `B_{TYPE}_HIT` / `B_{TYPE}_OUT` / `B_{TYPE}_FOUL`
-
-That's it. 12 of 15 independent values are read directly from player pages; the remaining 3 (HIT/OUT split per pitch type) are estimated from one leaderboard column.
+The script `data_parser.py` fetches and computes all 30 model parameters. `auto_update_pcsp.py` injects them into the template, producing a ready-to-run model file with up-to-date comments.
 
 #### Leaderboards NOT used (and why)
 
@@ -43,15 +78,34 @@ These leaderboards contain rich data but adding them would require a more comple
 
 > **Side (L/R):** The batting handedness column visible in leaderboards. Not modelled as a separate parameter — just note the matchup when pulling data.
 
-### Project mapping
+
+### Project Mapping
 
 - **Part B (Prediction / Reachability):**
-  "What is the probability Pitcher X gets Batter Y out?"
-  → `#assert AtBat reaches pitcherWins with prob;`
-
+  - "What is the probability Pitcher X gets Batter Y out?"
+  - → `#assert AtBat reaches pitcherWins with prob;`
 - **Part C (Strategy / Sensitivity):**
-  "What pitch mix should Pitcher X use against Batter Y?"
-  → Vary `P_FAST_PCT` / `P_BREAK_PCT` / `P_OFF_PCT` across combinations, re-run PAT for each, find the mix that maximises `pitcherWins`.
+  - "What pitch mix should Pitcher X use against Batter Y?"
+  - → Vary `P_FAST_PCT` / `P_BREAK_PCT` / `P_OFF_PCT` across combinations, re-run PAT for each, find the mix that maximises `pitcherWins`.
+
+---
+
+## 2. Automated Model Generation Pipeline
+
+**Step 1: Data Retrieval & Parameter Calculation**
+- `data_parser.py` fetches all required data for a given pitcher and batter, computes the 30 model parameters, and can export them as a #define block or JSON.
+
+**Step 2: Model File Generation**
+- `auto_update_pcsp.py` takes pitcher and batter names as input, calls `data_parser.py`, and injects the parameters into `baseball_template.pcsp`.
+- The output is `matchup.pcsp`, a fully documented, ready-to-run model for the selected matchup.
+
+**Step 3: Model Checking**
+- Open `matchup.pcsp` in PAT or your PCSP# toolchain.
+- Run reachability or sensitivity queries as described below.
+
+**Manual and Automated Workflows**
+- You can still call `data_parser.py` directly for custom data extraction, debugging, or exporting JSON for teammates.
+- The automated pipeline is robust for most MLB players; if data is missing, defaults and warnings are used.
 
 ---
 
@@ -288,22 +342,23 @@ HandleFoul:
 
 ---
 
-## 10. Data Extraction Workflow
 
-1. Go to the **pitcher's Statcast player page** → Pitch Arsenal section
-   - Record **Usage %** per pitch type → `P_FAST_PCT`, `P_BREAK_PCT`, `P_OFF_PCT`
-   - Record **Zone %** per pitch type → `P_{TYPE}_ZONE` (complement = `P_{TYPE}_MISS`)
-2. Go to the **batter's Statcast player page** → Plate Discipline section
-   - Record **Swing %** per pitch type → `B_{TYPE}_SWING` (complement = `B_{TYPE}_TAKE`)
-   - Record **Whiff %** per pitch type → `B_{TYPE}_WHIFF` (complement = `B_{TYPE}_CONTACT`)
-3. Go to the [Bat Tracking leaderboard](https://baseballsavant.mlb.com/leaderboard/bat-tracking)
-   - Search for the batter, filter by each pitch type
-   - Record **Squared-Up % Contact** → derive `B_{TYPE}_HIT`, `B_{TYPE}_OUT`, `B_{TYPE}_FOUL` using Section 4.3 formulas
-4. Apply the mapping formulas and inject into template using the Python script (Section 5)
+## 10. Data Extraction Workflow (Automated)
 
-> **Total data points to collect:** 3 (pitcher usage) + 3 (zone) + 3 (swing) + 3 (whiff) + 3 (squared-up) = **15 values** → fully populates all 30 `#define` parameters.
+**You do NOT need to collect data manually!**
 
-**Pitch type classification for model parameters:**
+The scripts handle all data retrieval, parameter calculation, and model file generation. For reference, here’s how the mapping works under the hood:
+
+1. **Pitcher’s Statcast page** → Pitch Arsenal section
+  - Usage % per pitch type → `P_FAST_PCT`, `P_BREAK_PCT`, `P_OFF_PCT`
+  - Zone % per pitch type → `P_{TYPE}_ZONE` (complement = `P_{TYPE}_MISS`)
+2. **Batter’s Statcast page** → Plate Discipline section
+  - Swing % per pitch type → `B_{TYPE}_SWING` (complement = `B_{TYPE}_TAKE`)
+  - Whiff % per pitch type → `B_{TYPE}_WHIFF` (complement = `B_{TYPE}_CONTACT`)
+3. **Bat Tracking leaderboard**
+  - Squared-Up % Contact → derive `B_{TYPE}_HIT`, `B_{TYPE}_OUT`, `B_{TYPE}_FOUL`
+
+Pitch type classification for model parameters:
 
 | Model Parameter   | Pitch Types Included                                                                 |
 |-------------------|-------------------------------------------------------------------------------------|
@@ -311,4 +366,15 @@ HandleFoul:
 | `P_BREAK_PCT`     | Slider (SL), Curveball (CU), Sweeper (ST), Knuckle Curve (KC)                        |
 | `P_OFF_PCT`       | Changeup (CH), Splitter (FS or SP), Forkball (FO), Eephus (EP, if listed), others    |
 
-> When extracting data, sum the Usage % for all pitch types in each group to get the value for each model parameter. If a pitch type is not listed, ignore it or classify as appropriate.
+---
+
+## 11. Project Progress & Next Steps
+
+- **Template and automation complete:** The PCSP# template is finalized and well-commented. All scripts are robust and ready for use.
+- **Comment/documentation consistency:** All generated files (`matchup.pcsp`) now match the template in comments and structure.
+- **Error handling:** The pipeline handles missing data gracefully and warns the user if defaults are used.
+- **Ready for extension:** The project is ready for further work (e.g., LLM integration, sensitivity analysis, or new sports).
+
+---
+
+**For any questions or to extend the project, see the code comments in `data_parser.py` and `auto_update_pcsp.py`.**

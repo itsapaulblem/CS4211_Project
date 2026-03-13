@@ -1,45 +1,42 @@
-#define P_FAST_PCT 45;
-#define P_BREAK_PCT 30;
-#define P_OFF_PCT 25;
+#define P_FAST_PCT 53;
+#define P_BREAK_PCT 36;
+#define P_OFF_PCT 11;
 
-#define P_FAST_ZONE 55;
-#define P_FAST_MISS 45;
 
-#define P_BREAK_ZONE 42;
-#define P_BREAK_MISS 58;
+#define P_FAST_ZONE 56;
+#define P_FAST_MISS 44;
+#define P_BREAK_ZONE 36;
+#define P_BREAK_MISS 64;
+#define P_OFF_ZONE 37;
+#define P_OFF_MISS 63;
 
-#define P_OFF_ZONE 48;
-#define P_OFF_MISS 52;
 
-#define B_FAST_SWING 70;
-#define B_FAST_TAKE 30;
+#define B_FAST_SWING 55;
+#define B_FAST_TAKE 45;
+#define B_BREAK_SWING 43;
+#define B_BREAK_TAKE 57;
+#define B_OFF_SWING 41;
+#define B_OFF_TAKE 59;
 
-#define B_BREAK_SWING 62;
-#define B_BREAK_TAKE 38;
 
-#define B_OFF_SWING 65;
-#define B_OFF_TAKE 35;
+#define B_FAST_WHIFF 13;
+#define B_FAST_CONTACT 87;
+#define B_BREAK_WHIFF 27;
+#define B_BREAK_CONTACT 73;
+#define B_OFF_WHIFF 27;
+#define B_OFF_CONTACT 73;
 
-#define B_FAST_WHIFF 22;
-#define B_FAST_CONTACT 78;
 
-#define B_BREAK_WHIFF 32;
-#define B_BREAK_CONTACT 68;
+#define B_FAST_FOUL 19;
+#define B_FAST_OUT 46;
+#define B_FAST_HIT 35;
+#define B_BREAK_FOUL 19;
+#define B_BREAK_OUT 46;
+#define B_BREAK_HIT 35;
+#define B_OFF_FOUL 19;
+#define B_OFF_OUT 46;
+#define B_OFF_HIT 35;
 
-#define B_OFF_WHIFF 28;
-#define B_OFF_CONTACT 72;
-
-#define B_FAST_FOUL 40;
-#define B_FAST_OUT 35;
-#define B_FAST_HIT 25;
-
-#define B_BREAK_FOUL 35;
-#define B_BREAK_OUT 45;
-#define B_BREAK_HIT 20;
-
-#define B_OFF_FOUL 38;
-#define B_OFF_OUT 42;
-#define B_OFF_HIT 20;
 
 var balls = 0;
 var strikes = 0;
