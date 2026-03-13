@@ -1,7 +1,9 @@
+// Probability of Pitch Distribution (Fastball, Breaking ball or Offspeed Pitch)
 #define P_FAST_PCT 45;
 #define P_BREAK_PCT 30;
 #define P_OFF_PCT 25;
 
+// Probability of Pitcher Zone Acccuracy (Zone or Miss)
 #define P_FAST_ZONE 55;
 #define P_FAST_MISS 45;
 
@@ -11,6 +13,7 @@
 #define P_OFF_ZONE 48;
 #define P_OFF_MISS 52;
 
+// Probability of Batter Swing (Swing or Take)
 #define B_FAST_SWING 70;
 #define B_FAST_TAKE 30;
 
@@ -20,6 +23,7 @@
 #define B_OFF_SWING 65;
 #define B_OFF_TAKE 35;
 
+// If swing, probability of Batter Contact (Whiff or Contact)
 #define B_FAST_WHIFF 22;
 #define B_FAST_CONTACT 78;
 
@@ -29,6 +33,7 @@
 #define B_OFF_WHIFF 28;
 #define B_OFF_CONTACT 72;
 
+// If contact, probability of foul ball or fielded out or base hit 
 #define B_FAST_FOUL 40;
 #define B_FAST_OUT 35;
 #define B_FAST_HIT 25;
@@ -41,107 +46,119 @@
 #define B_OFF_OUT 42;
 #define B_OFF_HIT 20;
 
+// Number of balls in the current at-bat
 var balls = 0;
+
+// Number of strikes in the current at-bat
 var strikes = 0;
+
+// Outcome: 0 = ongoing, 1 = pitcher wins, 2 = batter wins
 var result = 0;
 
+// The at-bat starts with a pitch
 AtBat = Pitch;
 
+// Pitcher randomly chooses the pitch type based on the defined probabilities
 Pitch = pcase {
-    P_FAST_PCT  : FastPitch
-    P_BREAK_PCT : BreakPitch
-    P_OFF_PCT   : OffPitch
+    P_FAST_PCT  : FastPitch      // Fastball
+    P_BREAK_PCT : BreakPitch     // Breaking ball
+    P_OFF_PCT   : OffPitch       // Offspeed
 };
 
+// Batter swings or takes, based on swing/take probabilities
 FastPitch = pcase {
-    B_FAST_SWING : FastSwing
-    B_FAST_TAKE  : FastTake
+    B_FAST_SWING : FastSwing     // Batter swings
+    B_FAST_TAKE  : FastTake      // Batter takes
 };
 
+// If batter takes, pitch is either called strike (in the zone) or a ball (miss), based on pitcher's accuracy
 FastTake = pcase {
-    P_FAST_ZONE : fast_called_strike -> HandleStrike
-    P_FAST_MISS : fast_ball -> HandleBall
+    P_FAST_ZONE : fast_called_strike -> HandleStrike   // In zone = strike
+    P_FAST_MISS : fast_ball -> HandleBall              // Miss = ball
 };
 
+// If batter swings, either whiffs (misses) or makes contact
 FastSwing = pcase {
-    B_FAST_WHIFF   : fast_whiff -> HandleStrike
-    B_FAST_CONTACT : FastContact
+    B_FAST_WHIFF   : fast_whiff -> HandleStrike        // Missed swing = strike
+    B_FAST_CONTACT : FastContact                      // Contact
 };
 
+// If contact, result is a foul, out or hit
 FastContact = pcase {
-    B_FAST_FOUL : fast_foul -> HandleFoul
-    B_FAST_OUT  : fast_out  -> HandleInPlayOut
-    B_FAST_HIT  : fast_hit  -> HandleHit
+    B_FAST_FOUL : fast_foul -> HandleFoul             // Foul ball
+    B_FAST_OUT  : fast_out  -> HandleInPlayOut        // Fielded out
+    B_FAST_HIT  : fast_hit  -> HandleHit              // Base hit
 };
 
+// Breaking ball branch (same structure as fastball)
 BreakPitch = pcase {
-    B_BREAK_SWING : BreakSwing
-    B_BREAK_TAKE  : BreakTake
+    B_BREAK_SWING : BreakSwing     // Batter swings
+    B_BREAK_TAKE  : BreakTake      // Batter takes
 };
-
 BreakTake = pcase {
-    P_BREAK_ZONE : break_called_strike -> HandleStrike
-    P_BREAK_MISS : break_ball -> HandleBall
+    P_BREAK_ZONE : break_called_strike -> HandleStrike   // In zone = strike
+    P_BREAK_MISS : break_ball -> HandleBall              // Miss = ball
 };
-
 BreakSwing = pcase {
-    B_BREAK_WHIFF   : break_whiff -> HandleStrike
-    B_BREAK_CONTACT : BreakContact
+    B_BREAK_WHIFF   : break_whiff -> HandleStrike        // Missed swing = strike
+    B_BREAK_CONTACT : BreakContact                      // Contact
 };
-
 BreakContact = pcase {
-    B_BREAK_FOUL : break_foul -> HandleFoul
-    B_BREAK_OUT  : break_out  -> HandleInPlayOut
-    B_BREAK_HIT  : break_hit  -> HandleHit
+    B_BREAK_FOUL : break_foul -> HandleFoul             // Foul ball
+    B_BREAK_OUT  : break_out  -> HandleInPlayOut        // Fielded out
+    B_BREAK_HIT  : break_hit  -> HandleHit              // Base hit
 };
 
+// Offspeed branch (same structure as above)
 OffPitch = pcase {
-    B_OFF_SWING : OffSwing
-    B_OFF_TAKE  : OffTake
+    B_OFF_SWING : OffSwing         // Batter swings
+    B_OFF_TAKE  : OffTake          // Batter takes
 };
-
 OffTake = pcase {
-    P_OFF_ZONE : off_called_strike -> HandleStrike
-    P_OFF_MISS : off_ball -> HandleBall
+    P_OFF_ZONE : off_called_strike -> HandleStrike   // In zone = strike
+    P_OFF_MISS : off_ball -> HandleBall              // Miss = ball
 };
-
 OffSwing = pcase {
-    B_OFF_WHIFF   : off_whiff -> HandleStrike
-    B_OFF_CONTACT : OffContact
+    B_OFF_WHIFF   : off_whiff -> HandleStrike        // Missed swing = strike
+    B_OFF_CONTACT : OffContact                      // Contact
 };
-
 OffContact = pcase {
-    B_OFF_FOUL : off_foul -> HandleFoul
-    B_OFF_OUT  : off_out  -> HandleInPlayOut
-    B_OFF_HIT  : off_hit  -> HandleHit
+    B_OFF_FOUL : off_foul -> HandleFoul             // Foul ball
+    B_OFF_OUT  : off_out  -> HandleInPlayOut        // Fielded out
+    B_OFF_HIT  : off_hit  -> HandleHit              // Base hit
 };
 
+// If strike: 3 strikes = out, else increment strikes
 HandleStrike =
     if (strikes >= 2) {
-        strikeout{result = 1} -> Skip
+        strikeout{result = 1} -> Skip      // Third strike: batter out
     } else {
-        strike{strikes = strikes + 1} -> Pitch
+        strike{strikes = strikes + 1} -> Pitch   // Add a strike
     };
 
+// If ball: 4 balls = walk, else increment balls
 HandleBall =
     if (balls >= 3) {
-        walk{result = 2} -> Skip
+        walk{result = 2} -> Skip          // Fourth ball: walk
     } else {
-        ball{balls = balls + 1} -> Pitch
+        ball{balls = balls + 1} -> Pitch  // Add a ball
     };
 
+// If foul: if <2 strikes, increment strikes; else, count remains
 HandleFoul =
     if (strikes < 2) {
-        foul_strike{strikes = strikes + 1} -> Pitch
+        foul_strike{strikes = strikes + 1} -> Pitch   // Foul adds a strike
     } else {
-        foul_no_change -> Pitch
+        foul_no_change -> Pitch                       // Foul does not strike out
     };
 
+// If in-play out: batter is out
 HandleInPlayOut =
-    fielded_out{result = 1} -> Skip;
+    fielded_out{result = 1} -> Skip;      // Batter out
 
+// If hit: batter wins
 HandleHit =
-    base_hit{result = 2} -> Skip;
+    base_hit{result = 2} -> Skip;         // Batter wins
 
 #define pitcherWins (result == 1);
 #define batterWins  (result == 2);

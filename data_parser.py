@@ -393,7 +393,7 @@ def export_matchup_json(pitcher_name: str, batter_name: str,
 
 
 # ── CLI / smoke test ──────────────────────────────────────────────────────────
-
+# Change the pitcher and batter names here to fetch different matchups, or run this file directly to see the output for Cole vs Judge.
 if __name__ == "__main__":
     pitcher = "Gerrit Cole"
     batter  = "Aaron Judge"
