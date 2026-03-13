@@ -40,8 +40,9 @@ pattern = r"\A(?:\s*//.*\n|\s*#define[^\n]*\n|\s*\n)*?(?=\s*var\s+)"
 new_content = re.sub(pattern, define_block + "\n", content, count=1, flags=re.MULTILINE)
 
 
-# 4. Remove all comments (// ...) from the new content before saving
+# 4. Remove all comments (// ...) from the new content before saving, and ensure file starts at line 1 (no leading blank lines)
 no_comments_content = re.sub(r"//.*", "", new_content)
+no_comments_content = no_comments_content.lstrip()  # Remove leading whitespace and blank lines
 with open(output_path, "w") as f:
     f.write(no_comments_content)
 
