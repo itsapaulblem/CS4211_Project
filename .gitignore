@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# pybaseball cache
+.pybaseball/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
