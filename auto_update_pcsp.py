@@ -35,12 +35,14 @@ output_path = "matchup.pcsp"
 with open(template_path, "r") as f:
     content = f.read()
 
-# 3. Replace the old #define block with the new one
-pattern = r"((?:\s*//.*\n)?(?:\s*#define[^\n]*\n)+)"
+# 3. Replace the full header define block (from top comments/defines up to first var)
+pattern = r"\A(?:\s*//.*\n|\s*#define[^\n]*\n|\s*\n)*?(?=\s*var\s+)"
 new_content = re.sub(pattern, define_block + "\n", content, count=1, flags=re.MULTILINE)
 
-# 4. Save the updated file (as matchup.pcsp)
+
+# 4. Remove all comments (// ...) from the new content before saving
+no_comments_content = re.sub(r"//.*", "", new_content)
 with open(output_path, "w") as f:
-    f.write(new_content)
+    f.write(no_comments_content)
 
 print(f"Updated {output_path} with real probabilities for {pitcher} vs {batter}!")
