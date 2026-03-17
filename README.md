@@ -40,7 +40,44 @@
 
 ---
 
-## 1. Overview
+## 1. Setup
+
+### 1. Install dependencies
+```sh
+pip install -r requirements.txt
+```
+
+### 2. Configure your environment
+Copy the example env file and fill in your paths:
+```sh
+cp .env.example .env
+```
+
+Then open `.env` and update the two paths:
+```
+PROJECT_DIR=C:\path\to\CS4211_Project        # Windows
+PAT_EXE=C:\path\to\MONO-PAT-v3.6.0\PAT3.Console.exe
+```
+
+For macOS/Linux:
+```
+PROJECT_DIR=/Users/yourname/path/to/CS4211_Project
+PAT_EXE=/Users/yourname/path/to/MONO-PAT-v3.6.0/PAT3.Console.exe
+```
+
+### 3. Install PAT (MONO-PAT v3.6.0)
+- Download **MONO-PAT v3.6.0**
+- Extract it and note the path to `PAT3.Console.exe` — this is your `PAT_EXE`
+- **Windows:** PAT runs via WSL + Mono. Make sure WSL is installed (`wsl --install`) and Mono is installed inside WSL (`sudo apt install mono-complete -y`)
+- **macOS/Linux:** Install Mono directly (`brew install mono` on macOS, `sudo apt install mono-complete` on Linux)
+
+### 4. Verify setup
+```sh
+python auto_matchup.py "Gerrit Cole" "Aaron Judge"
+```
+You should see probabilities printed at the end.
+
+## 2. Overview
 
 This project models a single baseball **at-bat** (pitcher vs batter) using PAT's probabilistic CSP (PCSP#) language, parameterized by real MLB data. The model is fully automated: you can generate a formal model for any matchup with a single command.
 
@@ -90,7 +127,7 @@ These leaderboards contain rich data but adding them would require a more comple
 
 ---
 
-## 2. Automated Model Generation Pipeline
+## 3. Automated Model Generation Pipeline
 
 **Step 1: Data Retrieval & Parameter Calculation**
 - `data_parser.py` fetches all required data for a given pitcher and batter, computes the 30 model parameters, and can export them as a #define block or JSON.
@@ -109,7 +146,7 @@ These leaderboards contain rich data but adding them would require a more comple
 
 ---
 
-## 2. Hierarchical Pitch Decision Tree
+## 4. Hierarchical Pitch Decision Tree
 
 Each pitch follows a realistic multi-stage process that maps directly to bat tracking data:
 
@@ -132,7 +169,7 @@ This tree is replicated for each pitch type (fastball / breaking / offspeed), ea
 
 ---
 
-## 3. Parameter Reference
+## 5. Parameter Reference
 
 ### Strategy Parameters (3) — what Part C varies
 
@@ -178,23 +215,23 @@ All values are integers 1–99 representing percentages.
 
 ---
 
-## 4. Mapping Bat Tracking Data to Model Parameters
+## 6. Mapping Bat Tracking Data to Model Parameters
 
 The Baseball Savant bat tracking leaderboard can be filtered by **pitch type** (fastball / breaking / offspeed). For a specific batter, set the pitch type filter and read the metrics. Here is how each model parameter is derived:
 
-### 4.1 Swing Rate (`B_{TYPE}_SWING`)
+### 6.1 Swing Rate (`B_{TYPE}_SWING`)
 
 **Source:** Statcast "Swing %" for the batter, filtered by pitch type. Available on the batter's Statcast player page or via Baseball Savant search API.
 
 **Complement:** `B_{TYPE}_TAKE = 100 - B_{TYPE}_SWING`
 
-### 4.2 Whiff Rate (`B_{TYPE}_WHIFF`)
+### 6.2 Whiff Rate (`B_{TYPE}_WHIFF`)
 
 **Source:** Batter's Statcast player page → Plate Discipline → Whiff % (= swinging strikes / total swings), filtered by pitch type.
 
 **Complement:** `B_{TYPE}_CONTACT = 100 - B_{TYPE}_WHIFF`
 
-### 4.3 Contact Quality (`B_{TYPE}_FOUL` / `OUT` / `HIT`)
+### 6.3 Contact Quality (`B_{TYPE}_FOUL` / `OUT` / `HIT`)
 
 These three must sum to 100 for each pitch type.
 
@@ -222,7 +259,7 @@ $$\text{FOUL} = 100 - \text{HIT} - \text{OUT}$$
 
 > Example: 100 − 22 − 55 = 23 → `B_BREAK_FOUL = 23`.
 
-### 4.4 Zone Rate (`P_{TYPE}_ZONE`)
+### 6.4 Zone Rate (`P_{TYPE}_ZONE`)
 
 **Source:** Pitcher's "Zone %" from Statcast, filtered by pitch type. This is a **pitcher** property — how often they locate in the zone.
 
@@ -240,7 +277,7 @@ $$\text{FOUL} = 100 - \text{HIT} - \text{OUT}$$
 
 ---
 
-## 5. How to Inject Parameters
+## 7. How to Inject Parameters
 
 ```python
 import re
@@ -257,7 +294,7 @@ open("matchup.pcsp", "w").write(template)
 
 ---
 
-## 6. Assertions
+## 8. Assertions
 
 ```
 #assert AtBat reaches pitcherWins with prob;
@@ -273,7 +310,7 @@ These two sum to 1.0.
 
 ---
 
-## 7. State Variables
+## 9. State Variables
 
 | Variable | Description | Range |
 |----------|-------------|-------|
@@ -283,7 +320,7 @@ These two sum to 1.0.
 
 ---
 
-## 8. Process Structure
+## 10. Process Structure
 
 ```
 AtBat → Pitch
@@ -318,7 +355,7 @@ HandleFoul:
 
 ---
 
-## 9. Example Use Cases
+## 11. Example Use Cases
 
 **"What is the probability that Gerrit Cole gets Aaron Judge out?"**
 1. Fetch Judge's bat tracking data filtered by fastball/breaking/offspeed
@@ -343,7 +380,7 @@ HandleFoul:
 ---
 
 
-## 10. Data Extraction Workflow (Automated)
+## 12. Data Extraction Workflow (Automated)
 
 **You do NOT need to collect data manually!**
 
@@ -368,7 +405,7 @@ Pitch type classification for model parameters:
 
 ---
 
-## 11. Project Progress & Next Steps
+## 13. Project Progress & Next Steps
 
 - **Template and automation complete:** The PCSP# template is finalized and well-commented. All scripts are robust and ready for use.
 - **Comment/documentation consistency:** All generated files (`matchup.pcsp`) now match the template in comments and structure.

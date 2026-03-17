@@ -1,43 +1,3 @@
-#define P_FAST_PCT 53;
-#define P_BREAK_PCT 36;
-#define P_OFF_PCT 11;
-
-
-#define P_FAST_ZONE 56;
-#define P_FAST_MISS 44;
-#define P_BREAK_ZONE 36;
-#define P_BREAK_MISS 64;
-#define P_OFF_ZONE 37;
-#define P_OFF_MISS 63;
-
-
-#define B_FAST_SWING 55;
-#define B_FAST_TAKE 45;
-#define B_BREAK_SWING 43;
-#define B_BREAK_TAKE 57;
-#define B_OFF_SWING 41;
-#define B_OFF_TAKE 59;
-
-
-#define B_FAST_WHIFF 13;
-#define B_FAST_CONTACT 87;
-#define B_BREAK_WHIFF 27;
-#define B_BREAK_CONTACT 73;
-#define B_OFF_WHIFF 27;
-#define B_OFF_CONTACT 73;
-
-
-#define B_FAST_FOUL 19;
-#define B_FAST_OUT 46;
-#define B_FAST_HIT 35;
-#define B_BREAK_FOUL 19;
-#define B_BREAK_OUT 46;
-#define B_BREAK_HIT 35;
-#define B_OFF_FOUL 19;
-#define B_OFF_OUT 46;
-#define B_OFF_HIT 35;
-
-
 var balls = 0;
 var strikes = 0;
 var result = 0;
@@ -45,72 +5,72 @@ var result = 0;
 AtBat = Pitch;
 
 Pitch = pcase {
-    P_FAST_PCT  : FastPitch
-    P_BREAK_PCT : BreakPitch
-    P_OFF_PCT   : OffPitch
+    70  : FastPitch
+    23 : BreakPitch
+    7   : OffPitch
 };
 
 FastPitch = pcase {
-    B_FAST_SWING : FastSwing
-    B_FAST_TAKE  : FastTake
+    55 : FastSwing
+    45  : FastTake
 };
 
 FastTake = pcase {
-    P_FAST_ZONE : fast_called_strike -> HandleStrike
-    P_FAST_MISS : fast_ball -> HandleBall
+    55 : fast_called_strike -> HandleStrike
+    45 : fast_ball -> HandleBall
 };
 
 FastSwing = pcase {
-    B_FAST_WHIFF   : fast_whiff -> HandleStrike
-    B_FAST_CONTACT : FastContact
+    13   : fast_whiff -> HandleStrike
+    87 : FastContact
 };
 
 FastContact = pcase {
-    B_FAST_FOUL : fast_foul -> HandleFoul
-    B_FAST_OUT  : fast_out  -> HandleInPlayOut
-    B_FAST_HIT  : fast_hit  -> HandleHit
+    19 : fast_foul -> HandleFoul
+    46  : fast_out  -> HandleInPlayOut
+    35  : fast_hit  -> HandleHit
 };
 
 BreakPitch = pcase {
-    B_BREAK_SWING : BreakSwing
-    B_BREAK_TAKE  : BreakTake
+    43 : BreakSwing
+    57  : BreakTake
 };
 
 BreakTake = pcase {
-    P_BREAK_ZONE : break_called_strike -> HandleStrike
-    P_BREAK_MISS : break_ball -> HandleBall
+    38 : break_called_strike -> HandleStrike
+    62 : break_ball -> HandleBall
 };
 
 BreakSwing = pcase {
-    B_BREAK_WHIFF   : break_whiff -> HandleStrike
-    B_BREAK_CONTACT : BreakContact
+    27   : break_whiff -> HandleStrike
+    73 : BreakContact
 };
 
 BreakContact = pcase {
-    B_BREAK_FOUL : break_foul -> HandleFoul
-    B_BREAK_OUT  : break_out  -> HandleInPlayOut
-    B_BREAK_HIT  : break_hit  -> HandleHit
+    19 : break_foul -> HandleFoul
+    46  : break_out  -> HandleInPlayOut
+    35  : break_hit  -> HandleHit
 };
 
 OffPitch = pcase {
-    B_OFF_SWING : OffSwing
-    B_OFF_TAKE  : OffTake
+    41 : OffSwing
+    59  : OffTake
 };
 
 OffTake = pcase {
-    P_OFF_ZONE : off_called_strike -> HandleStrike
-    P_OFF_MISS : off_ball -> HandleBall
+    28 : off_called_strike -> HandleStrike
+    72 : off_ball -> HandleBall
 };
 
 OffSwing = pcase {
-    B_OFF_WHIFF   : off_whiff -> HandleStrike
-    B_OFF_CONTACT : OffContact
+    27   : off_whiff -> HandleStrike
+    73 : OffContact
 };
 
 OffContact = pcase {
-    B_OFF_FOUL : off_foul -> HandleFoul
-    B_OFF_OUT  : off_out  -> HandleInPlayOut
-    B_OFF_HIT  : off_hit  -> HandleHit
+    19 : off_foul -> HandleFoul
+    46  : off_out  -> HandleInPlayOut
+    35  : off_hit  -> HandleHit
 };
 
 HandleStrike =
@@ -140,9 +100,8 @@ HandleInPlayOut =
 HandleHit =
     base_hit{result = 2} -> Skip;
 
-#define pitcherWins (result == 1);
-#define batterWins  (result == 2);
+#define pitcherWins result == 1;
+#define batterWins result == 2;
 
 #assert AtBat reaches pitcherWins with prob;
-
 #assert AtBat reaches batterWins with prob;
