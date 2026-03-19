@@ -1,5 +1,5 @@
 """
-llm_agent.py — LLM Agent Layer for CS4211 Baseball At-Bat Project
+llm_agent.py — LLM Agent Layer
 ===================================================================
 Sits on top of the existing pipeline:
   - data_parser.py     → get_matchup(), generate_pcsp_defines()
@@ -227,7 +227,6 @@ def fetch_stats(pitcher: str, batter: str) -> dict:
 def build_model(stats: dict, pitcher: str, batter: str,
                 output_path: str = "matchup.pcsp") -> str:
     """
-    Uses the same approach as auto_update_pcsp.py:
     Reads baseball_template.pcsp, injects stats via generate_pcsp_defines(),
     writes the output .pcsp file.
     """
@@ -237,7 +236,7 @@ def build_model(stats: dict, pitcher: str, batter: str,
     with open(template_path, "r") as f:
         content = f.read()
 
-    # Replace the define block (same regex as auto_update_pcsp.py)
+    # Replace the define block
     pattern = r"\A(?:\s*//.*\n|\s*#define[^\n]*\n|\s*\n)*?(?=\s*var\s+)"
     new_content = re.sub(pattern, define_block + "\n", content,
                          count=1, flags=re.MULTILINE)
@@ -295,7 +294,7 @@ def run_pat(pcsp_file: str) -> dict:
     system = platform.system()
 
     if system == "Windows":
-        # Same WSL path conversion as auto_matchup.py
+        # WSL path conversion
         def to_wsl_path(win_path):
             return (
                 "/mnt/" +
@@ -328,7 +327,7 @@ def run_pat(pcsp_file: str) -> dict:
         print(f"[PAT] ERROR: {e}")
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
 
-    # Read output from file (same as auto_matchup.py)
+    # Read output from file
     try:
         with open(output_file, "r") as f:
             output = f.read()
@@ -336,7 +335,7 @@ def run_pat(pcsp_file: str) -> dict:
         print(f"[PAT] ERROR: Output file not created: {output_file}")
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
 
-    # Parse probabilities — same regex as auto_matchup.py
+    # Parse probabilities
     probs_list = re.findall(r"Probability \[([0-9.]+),", output)
 
     if len(probs_list) >= 2:
