@@ -7,7 +7,8 @@ Sits on top of the existing pipeline:
   - auto_matchup.py     → runs PAT and returns probabilities
 
 Classification format:
-  { "intent": "prediction | strategy", "analysis_type": "reachability | sensitivity" }
+  { "intent": "prediction | strategy",
+    "analysis_type": "reachability | sensitivity" }
 
 Three execution paths:
   prediction + reachability  → 1 PAT run (base model)
@@ -25,14 +26,13 @@ Requirements:
   - pip install openai (or google-generativeai) for real LLM calls
 """
 
+from data_parser import get_matchup
 import json
 import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 from dotenv import load_dotenv
-import google.genai as genai
 
 # Load project paths from .env
 load_dotenv()
@@ -41,7 +41,6 @@ PAT_EXE = os.getenv("PAT_EXE", "")
 
 # Import existing project modules
 sys.path.insert(0, PROJECT_DIR)
-from data_parser import get_matchup, generate_pcsp_defines
 
 
 # ============================================================================
@@ -96,19 +95,24 @@ RULES:
 EXAMPLES:
 
 User: "What is the probability Gerrit Cole gets Aaron Judge out?"
-{"intent": "prediction", "analysis_type": "reachability", "pitcher": "Gerrit Cole", "batter": "Aaron Judge"}
+{"intent": "prediction", "analysis_type": "reachability",
+    "pitcher": "Gerrit Cole", "batter": "Aaron Judge"}
 
 User: "Should Cole throw more breaking balls against Judge?"
-{"intent": "strategy", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole", "batter": "Aaron Judge", "parameter_to_vary": "pitch_mix"}
+{"intent": "strategy", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
+    "batter": "Aaron Judge", "parameter_to_vary": "pitch_mix"}
 
 User: "What if Cole's fastball command improves by 10%?"
-{"intent": "prediction", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole", "batter": "Aaron Judge", "parameter": "P_FAST_ZONE", "delta": 10}
+{"intent": "prediction", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
+    "batter": "Aaron Judge", "parameter": "P_FAST_ZONE", "delta": 10}
 
 User: "What is the optimal pitch mix for Cole against Judge?"
-{"intent": "strategy", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole", "batter": "Aaron Judge", "parameter_to_vary": "pitch_mix"}
+{"intent": "strategy", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
+    "batter": "Aaron Judge", "parameter_to_vary": "pitch_mix"}
 
 User: "How much does a 5% decrease in Judge's chase rate help Cole?"
-{"intent": "prediction", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole", "batter": "Aaron Judge", "parameter": "B_BREAK_SWING", "delta": -5}
+{"intent": "prediction", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
+    "batter": "Aaron Judge", "parameter": "B_BREAK_SWING", "delta": -5}
 """
 
 
@@ -139,7 +143,7 @@ def call_llm(user_query: str) -> dict:
     import google.generativeai as genai
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
     model = genai.GenerativeModel("gemini-2.5-flash-lite",
-        system_instruction=SYSTEM_PROMPT)
+                                  system_instruction=SYSTEM_PROMPT)
     raw = model.generate_content(user_query).text
 
     # ----- MOCK (testing without API key) -----
@@ -224,29 +228,46 @@ def fetch_stats(pitcher: str, batter: str) -> dict:
     return get_matchup(pitcher, batter)
 
 
+# def build_model(stats: dict, pitcher: str, batter: str,
+#                 output_path: str = "matchup.pcsp") -> str:
+#     """
+#     Reads baseball_template.pcsp, injects stats via generate_pcsp_defines(),
+#     writes the output .pcsp file.
+#     """
+#     define_block = generate_pcsp_defines(stats)
+#     template_path = os.path.join(PROJECT_DIR, "baseball_template.pcsp")
+
+#     with open(template_path, "r") as f:
+#         content = f.read()
+
+#     # Replace the define block
+#     pattern = r"\A(?:\s*//.*\n|\s*#define[^\n]*\n|\s*\n)*?(?=\s*var\s+)"
+#     new_content = re.sub(pattern, define_block + "\n", content,
+#                          count=1, flags=re.MULTILINE)
+
+#     # Remove comments
+#     new_content = re.sub(r"//.*", "", new_content).lstrip()
+
+#     full_output = os.path.join(PROJECT_DIR, output_path)
+#     with open(full_output, "w") as f:
+#         f.write(new_content)
+
+#     print(f"[Model] Generated: {full_output}")
+#     return full_output
+
 def build_model(stats: dict, pitcher: str, batter: str,
                 output_path: str = "matchup.pcsp") -> str:
-    """
-    Reads baseball_template.pcsp, injects stats via generate_pcsp_defines(),
-    writes the output .pcsp file.
-    """
-    define_block = generate_pcsp_defines(stats)
     template_path = os.path.join(PROJECT_DIR, "baseball_template.pcsp")
 
     with open(template_path, "r") as f:
         content = f.read()
 
-    # Replace the define block
-    pattern = r"\A(?:\s*//.*\n|\s*#define[^\n]*\n|\s*\n)*?(?=\s*var\s+)"
-    new_content = re.sub(pattern, define_block + "\n", content,
-                         count=1, flags=re.MULTILINE)
-
-    # Remove comments
-    new_content = re.sub(r"//.*", "", new_content).lstrip()
+    for key, val in stats.items():
+        content = content.replace(f"{{{{{key}}}}}", str(val))
 
     full_output = os.path.join(PROJECT_DIR, output_path)
     with open(full_output, "w") as f:
-        f.write(new_content)
+        f.write(content)
 
     print(f"[Model] Generated: {full_output}")
     return full_output
@@ -287,7 +308,12 @@ def run_pat(pcsp_file: str) -> dict:
         return {"pitcherWins_prob": 0.634, "batterWins_prob": 0.366}
 
     pcsp_abs = os.path.abspath(pcsp_file)
-    output_file = os.path.splitext(pcsp_abs)[0] + "_output.txt"
+    # output_file = os.path.splitext(pcsp_abs)[0] + "_output.txt"
+    # output_abs = os.path.abspath(output_file)
+    output_filename = os.path.splitext(os.path.basename(pcsp_abs))[
+        0] + "_output.txt"
+
+    output_file = os.path.join(PROJECT_DIR, output_filename)
     output_abs = os.path.abspath(output_file)
 
     import platform
@@ -315,8 +341,30 @@ def run_pat(pcsp_file: str) -> dict:
     else:  # Linux
         cmd = ["mono", PAT_EXE, "-pcsp", pcsp_abs, output_abs]
 
+    # try:
+    #     subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    # except subprocess.TimeoutExpired:
+    #     print("[PAT] ERROR: Timed out after 120s")
+    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
+    # except FileNotFoundError:
+    #     print("[PAT] ERROR: WSL/mono/PAT not found — check .env and WSL install")
+    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
+    # except Exception as e:
+    #     print(f"[PAT] ERROR: {e}")
+    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
+
+    # # Read output from file
+    # try:
+    #     with open(output_file, "r") as f:
+    #         output = f.read()
+    # except FileNotFoundError:
+    #     print(f"[PAT] ERROR: Output file not created: {output_file}")
+    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
+
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        with open(output_file, "r") as f:
+            output = f.read()
     except subprocess.TimeoutExpired:
         print("[PAT] ERROR: Timed out after 120s")
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
@@ -325,14 +373,6 @@ def run_pat(pcsp_file: str) -> dict:
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
     except Exception as e:
         print(f"[PAT] ERROR: {e}")
-        return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-
-    # Read output from file
-    try:
-        with open(output_file, "r") as f:
-            output = f.read()
-    except FileNotFoundError:
-        print(f"[PAT] ERROR: Output file not created: {output_file}")
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
 
     # Parse probabilities
@@ -530,7 +570,8 @@ def synthesize(user_query: str, tc: dict, result: dict) -> str:
         )
 
     elif intent == "prediction" and analysis == "sensitivity":
-        readable = result["parameter"].replace("P_", "").replace("B_", "").replace("_", " ").lower()
+        readable = result["parameter"].replace(
+            "P_", "").replace("B_", "").replace("_", " ").lower()
         change = result["change"]
         return (
             f"If {readable} changes by {result['delta']:+d} points: "
@@ -544,7 +585,8 @@ def synthesize(user_query: str, tc: dict, result: dict) -> str:
         if not result.get("best_adjustment"):
             return "No improvements found."
         best = result["best_adjustment"]
-        readable = best["parameter"].replace("P_", "").replace("B_", "").replace("_", " ").lower()
+        readable = best["parameter"].replace("P_", "").replace(
+            "B_", "").replace("_", " ").lower()
         direction = "increase" if best["delta"] > 0 else "decrease"
         return (
             f"Recommendation: {direction} {readable} by "

@@ -81,10 +81,8 @@ def run_pat_model():
             os.path.join(PROJECT_DIR, "matchup_output.txt")
         ]
 
-    subprocess.run(command, capture_output=True, text=True)
-
-    with open("matchup_output.txt", "r") as f:
-        output = f.read()
+    result = subprocess.run(command, capture_output=True, text=True)
+    output = result.stdout
 
     probs = re.findall(r"Probability \[([0-9.]+),", output)
 
