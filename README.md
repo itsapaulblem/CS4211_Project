@@ -68,7 +68,16 @@ PAT_EXE=/Users/yourname/path/to/MONO-PAT-v3.6.0/PAT3.Console.exe
 ### 3. Install PAT (MONO-PAT v3.6.0)
 - Download **MONO-PAT v3.6.0**
 - Extract it and note the path to `PAT3.Console.exe` — this is your `PAT_EXE`
-- **Windows:** PAT runs via WSL + Mono. Make sure WSL is installed (`wsl --install`) and Mono is installed inside WSL (`sudo apt install mono-complete -y`)
+- **Windows (recommended, CLI-only): run PAT via Mono on Windows**
+  - Install **Mono for Windows** (this is required for `PAT3.Console.exe` to run reliably)
+    - Download: `https://www.mono-project.com/download/stable/`
+  - Verify Mono is installed by checking that this exists:
+    - `C:\Program Files\Mono\bin\mono.exe`
+  - Your scripts will run PAT like:
+    - `mono PAT3.Console.exe -pcsp matchup.pcsp matchup_output.txt`
+- **Windows (alternative): run PAT via WSL + Mono**
+  - Install WSL: `wsl --install`
+  - In Ubuntu/WSL: `sudo apt update && sudo apt install -y mono-complete`
 - **macOS/Linux:** Install Mono directly (`brew install mono` on macOS, `sudo apt install mono-complete` on Linux)
 
 ### 4. Verify setup
@@ -76,6 +85,21 @@ PAT_EXE=/Users/yourname/path/to/MONO-PAT-v3.6.0/PAT3.Console.exe
 python auto_matchup.py "Gerrit Cole" "Aaron Judge"
 ```
 You should see probabilities printed at the end.
+
+---
+
+## Windows notes (PAT CLI setup)
+
+If you're on Windows and using this repo's automation, the **simplest reliable setup** is:
+
+- **Install Mono for Windows**
+- Set `PAT_EXE` to your extracted `PAT3.Console.exe` (MONO-PAT v3.6.0)
+
+`auto_matchup.py` will:
+- **delete** `matchup_output.txt` before each run (to prevent stale results)
+- run PAT via `mono.exe` (no WSL required)
+
+If you previously saw inconsistent probabilities, it was usually because PAT didn't run and an old `matchup_output.txt` got reused. The current runner prevents that.
 
 ## 2. Overview
 

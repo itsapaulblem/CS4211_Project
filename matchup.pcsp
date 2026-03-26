@@ -5,8 +5,8 @@ var result = 0;
 AtBat = Pitch;
 
 Pitch = pcase {
-    57  : FastPitch
-    38 : BreakPitch
+    90  : FastPitch
+    5 : BreakPitch
     5   : OffPitch
 };
 

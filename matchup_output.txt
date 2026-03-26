@@ -1,7 +1,7 @@
 =======================================================
 Assertion: AtBat() reaches pitcherWins with prob
 ********Verification Result********
-The Assertion (AtBat() reaches pitcherWins with prob) is Valid with Probability [0.6597, 0.6597];
+The Assertion (AtBat() reaches pitcherWins with prob) is Valid with Probability [0.64391, 0.64391];
 
 ********Verification Setting********
 Admissible Behavior: All
@@ -14,14 +14,14 @@ Maximum difference threshold : 1E-06
 Visited States:504
 Total Transitions:684
 MDP Iterations:15684
-Time Used:0.0352904s
-Estimated Memory Used:32571.544KB
+Time Used:0.0177333s
+Estimated Memory Used:32575.184KB
 
 
 =======================================================
 Assertion: AtBat() reaches batterWins with prob
 ********Verification Result********
-The Assertion (AtBat() reaches batterWins with prob) is Valid with Probability [0.34029, 0.34029];
+The Assertion (AtBat() reaches batterWins with prob) is Valid with Probability [0.35609, 0.35609];
 
 ********Verification Setting********
 Admissible Behavior: All
@@ -33,8 +33,8 @@ Maximum difference threshold : 1E-06
 ********Verification Statistics********
 Visited States:504
 Total Transitions:684
-MDP Iterations:15644
-Time Used:0.010405s
-Estimated Memory Used:32561.744KB
+MDP Iterations:16206
+Time Used:0.0047839s
+Estimated Memory Used:32572.784KB
 
 
