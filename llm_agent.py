@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 
 # Load project paths from .env
 load_dotenv()
-PROJECT_DIR = os.getenv("PROJECT_DIR", ".")
+PROJECT_DIR = os.getenv("PROJECT_DIR", "")
 PAT_EXE = os.getenv("PAT_EXE", "")
 
 # Import existing project modules
