@@ -86,6 +86,45 @@ python auto_matchup.py "Gerrit Cole" "Aaron Judge"
 ```
 You should see probabilities printed at the end.
 
+### 5. How to use strategy analysis (Part C)
+
+The strategy script is `strategy_analysis.py`. It supports two modes:
+
+#### A) Sensitivity mode (one small pitch-mix shift)
+
+Use this to test one specific change, e.g. move 5% from fastballs to breaking balls:
+
+```sh
+python strategy_analysis.py sensitivity "Gerrit Cole" "Aaron Judge" --from fast --to break --step 5
+```
+
+What it does:
+- Runs baseline matchup probabilities
+- Applies one legal shift to pitch mix only (`P_FAST_PCT`, `P_BREAK_PCT`, `P_OFF_PCT`)
+- Re-runs PAT and prints the probability delta
+
+#### B) Optimize mode (search all legal pitch mixes)
+
+Use this to find the best pitch mix for pitcher win probability:
+
+```sh
+python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --step 5 --min-pct 5
+```
+
+What it does:
+- Runs baseline matchup probabilities
+- Tests all legal pitch mixes where:
+  - `fast + break + off = 100`
+  - each pitch type is at least `min-pct`
+  - values move in `step` increments
+- Prints all tested candidates and the best mix found
+
+Quick demo option (faster, fewer candidates):
+
+```sh
+python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --step 10 --min-pct 10
+```
+
 ---
 
 ## Windows notes (PAT CLI setup)
