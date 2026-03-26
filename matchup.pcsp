@@ -5,56 +5,56 @@ var result = 0;
 AtBat = Pitch;
 
 Pitch = pcase {
-    90  : FastPitch
-    5 : BreakPitch
-    5   : OffPitch
+    70  : FastPitch
+    23 : BreakPitch
+    7   : OffPitch
 };
 
 FastPitch = pcase {
-    45 : FastSwing
-    55  : FastTake
+    43 : FastSwing
+    57  : FastTake
 };
 
 FastTake = pcase {
-    53 : fast_called_strike -> HandleStrike
-    47 : fast_ball -> HandleBall
+    54 : fast_called_strike -> HandleStrike
+    46 : fast_ball -> HandleBall
 };
 
 FastSwing = pcase {
-    20   : fast_whiff -> HandleStrike
-    80 : FastContact
+    16   : fast_whiff -> HandleStrike
+    84 : FastContact
 };
 
 FastContact = pcase {
     19 : fast_foul -> HandleFoul
-    46  : fast_out  -> HandleInPlayOut
-    35  : fast_hit  -> HandleHit
+    43  : fast_out  -> HandleInPlayOut
+    38  : fast_hit  -> HandleHit
 };
 
 BreakPitch = pcase {
-    39 : BreakSwing
-    61  : BreakTake
+    31 : BreakSwing
+    69  : BreakTake
 };
 
 BreakTake = pcase {
-    50 : break_called_strike -> HandleStrike
-    50 : break_ball -> HandleBall
+    37 : break_called_strike -> HandleStrike
+    63 : break_ball -> HandleBall
 };
 
 BreakSwing = pcase {
-    40   : break_whiff -> HandleStrike
-    60 : BreakContact
+    22   : break_whiff -> HandleStrike
+    78 : BreakContact
 };
 
 BreakContact = pcase {
-    20 : break_foul -> HandleFoul
-    46  : break_out  -> HandleInPlayOut
-    34  : break_hit  -> HandleHit
+    18 : break_foul -> HandleFoul
+    41  : break_out  -> HandleInPlayOut
+    41  : break_hit  -> HandleHit
 };
 
 OffPitch = pcase {
-    41 : OffSwing
-    59  : OffTake
+    34 : OffSwing
+    66  : OffTake
 };
 
 OffTake = pcase {
@@ -63,14 +63,14 @@ OffTake = pcase {
 };
 
 OffSwing = pcase {
-    47   : off_whiff -> HandleStrike
-    53 : OffContact
+    29   : off_whiff -> HandleStrike
+    71 : OffContact
 };
 
 OffContact = pcase {
-    21 : off_foul -> HandleFoul
-    49  : off_out  -> HandleInPlayOut
-    30  : off_hit  -> HandleHit
+    16 : off_foul -> HandleFoul
+    38  : off_out  -> HandleInPlayOut
+    46  : off_hit  -> HandleHit
 };
 
 HandleStrike =

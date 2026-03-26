@@ -7,6 +7,32 @@ from data_parser import get_matchup
 
 load_dotenv()
 
+def _find_mono_exe() -> str:
+    import shutil
+    mono = shutil.which("mono")
+    if mono:
+        return mono
+    candidates = [
+        os.path.join(os.environ.get("ProgramFiles", ""), "Mono", "bin", "mono.exe"),
+        os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Mono", "bin", "mono.exe"),
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+    raise FileNotFoundError(
+        "Mono runtime not found. Install Mono from "
+        "https://www.mono-project.com/download/stable/"
+    )
+
+
+def delete_matchup_output(project_dir: str | None = None) -> str:
+    if project_dir is None:
+        project_dir = os.getenv("PROJECT_DIR") or os.getcwd()
+    output_path = os.path.join(project_dir, "matchup_output.txt")
+    if os.path.exists(output_path):
+        os.remove(output_path)
+    return output_path
+
 
 def generate_matchup_pcsp(pitcher, batter):
     matchup = get_matchup(pitcher, batter)
@@ -37,55 +63,34 @@ def run_pat_model():
 
     import platform
     system = platform.system()
-
-    PROJECT_DIR = os.getenv("PROJECT_DIR")
-    PAT_EXE = os.getenv("PAT_EXE")
-
-    if not PROJECT_DIR or not PAT_EXE:
-        raise Exception("Please set PROJECT_DIR and PAT_EXE in your .env file")
+    output_path = delete_matchup_output(PROJECT_DIR)
+    pcsp_path = os.path.join(PROJECT_DIR, "matchup.pcsp")
 
     if system == "Windows":
-        # Convert Windows path to WSL path
-        def to_wsl_path(win_path):
-            return (
-                "/mnt/" +
-                win_path.replace("\\", "/")
-                .replace(":", "")
-                .lower()
-            )
+        command = [_find_mono_exe(), PAT_EXE, "-pcsp", pcsp_path, output_path]
+    else:
+        command = ["mono", PAT_EXE, "-pcsp", pcsp_path, output_path]
 
-        command = [
-            "wsl",
-            "mono",
-            to_wsl_path(PAT_EXE),
-            "-pcsp",
-            to_wsl_path(os.path.join(PROJECT_DIR, "matchup.pcsp")),
-            to_wsl_path(os.path.join(PROJECT_DIR, "matchup_output.txt"))
-        ]
-
-    elif system == "Darwin":  # macOS
-        command = [
-            "mono",
-            PAT_EXE,
-            "-pcsp",
-            os.path.join(PROJECT_DIR, "matchup.pcsp"),
-            os.path.join(PROJECT_DIR, "matchup_output.txt")
-        ]
-
-    else:  # Linux
-        command = [
-            "mono",
-            PAT_EXE,
-            "-pcsp",
-            os.path.join(PROJECT_DIR, "matchup.pcsp"),
-            os.path.join(PROJECT_DIR, "matchup_output.txt")
-        ]
-
-    # result = subprocess.run(command, capture_output=True, text=True)
-    # output = result.stdout
-
-    subprocess.run(command, capture_output=True, text=True)
-    with open(os.path.join(PROJECT_DIR, "matchup_output.txt"), "r") as f:
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=os.path.dirname(PAT_EXE) or None,
+    )
+    if result.returncode != 0:
+        raise Exception(
+            f"PAT exited with code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    if not os.path.exists(output_path):
+        raise Exception(
+            "PAT did not produce matchup_output.txt.\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    with open(output_path, "r") as f:
         output = f.read()
 
     probs = re.findall(r"Probability \[([0-9.]+),", output)
