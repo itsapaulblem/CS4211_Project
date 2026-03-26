@@ -47,15 +47,16 @@ sys.path.insert(0, PROJECT_DIR)
 # SYSTEM PROMPT
 # ============================================================================
 
-SYSTEM_PROMPT = """You are an expert AI Baseball Analyst. You have access to a \
-Formal Verification engine (PAT model checker) that computes EXACT at-bat outcome \
-probabilities. You must NEVER guess or estimate probabilities.
+SYSTEM_PROMPT = """You are an expert AI Baseball Analyst. You have access to a
+Formal Verification engine (PAT model checker) that computes EXACT at-bat
+outcome probabilities. You must NEVER guess or estimate probabilities.
 
 THE MODEL:
 An at-bat is a probabilistic state machine with 30 parameters:
 
 Pitcher (9): P_FAST_PCT / P_BREAK_PCT / P_OFF_PCT (pitch mix, sum=100),
-  P_FAST_ZONE/MISS, P_BREAK_ZONE/MISS, P_OFF_ZONE/MISS (zone accuracy, pairs sum=100)
+  P_FAST_ZONE/MISS, P_BREAK_ZONE/MISS, P_OFF_ZONE/MISS (zone accuracy,
+  pairs sum=100)
 
 Batter (18+): B_FAST_SWING/TAKE, B_BREAK_SWING/TAKE, B_OFF_SWING/TAKE,
   B_FAST_WHIFF/CONTACT, B_BREAK_WHIFF/CONTACT, B_OFF_WHIFF/CONTACT,
@@ -71,7 +72,8 @@ OUTPUT FORMAT — always a JSON with these fields:
 
 Additional fields depending on combination:
   prediction + sensitivity: "parameter" (PCSP# param name), "delta" (int)
-  strategy + sensitivity:   "parameter_to_vary" ("pitch_mix"|"zone_accuracy"|"swing_rate"|"all")
+  strategy + sensitivity:   "parameter_to_vary"
+    ("pitch_mix"|"zone_accuracy"|"swing_rate"|"all")
 
 THE 3 COMBINATIONS:
 
@@ -99,20 +101,24 @@ User: "What is the probability Gerrit Cole gets Aaron Judge out?"
     "pitcher": "Gerrit Cole", "batter": "Aaron Judge"}
 
 User: "Should Cole throw more breaking balls against Judge?"
-{"intent": "strategy", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
-    "batter": "Aaron Judge", "parameter_to_vary": "pitch_mix"}
+{"intent": "strategy", "analysis_type": "sensitivity",
+    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+    "parameter_to_vary": "pitch_mix"}
 
 User: "What if Cole's fastball command improves by 10%?"
-{"intent": "prediction", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
-    "batter": "Aaron Judge", "parameter": "P_FAST_ZONE", "delta": 10}
+{"intent": "prediction", "analysis_type": "sensitivity",
+    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+    "parameter": "P_FAST_ZONE", "delta": 10}
 
 User: "What is the optimal pitch mix for Cole against Judge?"
-{"intent": "strategy", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
-    "batter": "Aaron Judge", "parameter_to_vary": "pitch_mix"}
+{"intent": "strategy", "analysis_type": "sensitivity",
+    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+    "parameter_to_vary": "pitch_mix"}
 
 User: "How much does a 5% decrease in Judge's chase rate help Cole?"
-{"intent": "prediction", "analysis_type": "sensitivity", "pitcher": "Gerrit Cole",
-    "batter": "Aaron Judge", "parameter": "B_BREAK_SWING", "delta": -5}
+{"intent": "prediction", "analysis_type": "sensitivity",
+    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+    "parameter": "B_BREAK_SWING", "delta": -5}
 """
 
 
@@ -204,8 +210,10 @@ def _validate(tc: dict):
     assert tc.get("intent") in ("prediction", "strategy"), \
         f"intent must be prediction|strategy, got {tc.get('intent')}"
     assert tc.get("analysis_type") in ("reachability", "sensitivity"), \
-        f"analysis_type must be reachability|sensitivity, got {tc.get('analysis_type')}"
-    assert "pitcher" in tc and "batter" in tc, "Must include pitcher and batter"
+        f"analysis_type must be reachability|sensitivity, " \
+        f"got {tc.get('analysis_type')}"
+    assert "pitcher" in tc and "batter" in tc, \
+        "Must include pitcher and batter"
 
     if tc["intent"] == "prediction" and tc["analysis_type"] == "sensitivity":
         assert "parameter" in tc and "delta" in tc, \
@@ -288,7 +296,8 @@ def build_perturbed_model(stats: dict, pitcher: str, batter: str,
     _fix_complements(parameter, modified, old_val, new_val)
 
     if output_path is None:
-        output_path = f"matchup_{parameter}_{'+' if delta > 0 else ''}{delta}.pcsp"
+        sign = '+' if delta > 0 else ''
+        output_path = f"matchup_{parameter}_{sign}{delta}.pcsp"
 
     return build_model(modified, pitcher, batter, output_path)
 
@@ -347,7 +356,8 @@ def run_pat(pcsp_file: str) -> dict:
     #     print("[PAT] ERROR: Timed out after 120s")
     #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
     # except FileNotFoundError:
-    #     print("[PAT] ERROR: WSL/mono/PAT not found — check .env and WSL install")
+    #     print("[PAT] ERROR: WSL/mono/PAT not found—"
+    #           "check .env and WSL install")
     #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
     # except Exception as e:
     #     print(f"[PAT] ERROR: {e}")
@@ -369,7 +379,8 @@ def run_pat(pcsp_file: str) -> dict:
         print("[PAT] ERROR: Timed out after 120s")
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
     except FileNotFoundError:
-        print("[PAT] ERROR: WSL/mono/PAT not found — check .env and WSL install")
+        print("[PAT] ERROR: WSL/mono/PAT not found — "
+              "check .env and WSL install")
         return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
     except Exception as e:
         print(f"[PAT] ERROR: {e}")
@@ -459,9 +470,11 @@ def execute_tool(tc: dict) -> dict:
     if intent == "prediction" and analysis == "reachability":
         return _prediction_reachability(pitcher, batter)
     elif intent == "prediction" and analysis == "sensitivity":
-        return _prediction_sensitivity(pitcher, batter, tc["parameter"], tc["delta"])
+        return _prediction_sensitivity(
+            pitcher, batter, tc["parameter"], tc["delta"])
     elif intent == "strategy" and analysis == "sensitivity":
-        return _strategy_sensitivity(pitcher, batter, tc.get("parameter_to_vary", "all"))
+        param_to_vary = tc.get("parameter_to_vary", "all")
+        return _strategy_sensitivity(pitcher, batter, param_to_vary)
     elif intent == "strategy" and analysis == "reachability":
         return _prediction_reachability(pitcher, batter)
 
@@ -544,13 +557,14 @@ def _strategy_sensitivity(pitcher: str, batter: str,
 # RESULT SYNTHESIS
 # ============================================================================
 
-SYNTHESIS_PROMPT = """You are a baseball coach. Given the formal model-checking \
-results below, provide a clear 3-5 sentence summary. Include exact probabilities. \
-Explain in plain baseball language. Do NOT change numbers.
-
-User question: {query}
-Result: {result_json}
-"""
+SYNTHESIS_PROMPT = (
+    "You are a baseball coach. Given the formal model-checking "
+    "results below, provide a clear 3-5 sentence summary. Include exact "
+    "probabilities. Explain in plain baseball language. Do NOT change "
+    "numbers.\n\n"
+    "User question: {query}\n"
+    "Result: {result_json}\n"
+)
 
 
 def synthesize(user_query: str, tc: dict, result: dict) -> str:
@@ -593,7 +607,8 @@ def synthesize(user_query: str, tc: dict, result: dict) -> str:
             f"{abs(best['delta'])} percentage points. This moves "
             f"pitcher-win probability from {result['base_pitcherWins']:.1%} "
             f"to {best['pitcherWins_prob']:.1%} "
-            f"({'+' if best['improvement'] > 0 else ''}{best['improvement']:.2%}). "
+            f"({'+' if best['improvement'] > 0 else ''}"
+            f"{best['improvement']:.2%}). "
             f"Tested {result['total_runs']} variations."
         )
 
@@ -620,7 +635,7 @@ def run_agent(user_query: str) -> str:
     print(f"\n[2] Executing: {tc['intent']} + {tc['analysis_type']}...")
     result = execute_tool(tc)
 
-    print(f"\n[3] Synthesizing...")
+    print("\n[3] Synthesizing...")
     answer = synthesize(user_query, tc, result)
 
     print(f"\n{'='*60}")
@@ -637,9 +652,12 @@ if __name__ == "__main__":
         print("CS4211 Baseball AI Coach — LLM Agent Layer")
         print("=" * 45)
         print('\nUsage:')
-        print('  python llm_agent.py "What is the probability Cole gets Judge out?"')
-        print('  python llm_agent.py "Should Cole throw more breaking balls?"')
-        print('  python llm_agent.py "What if Cole improves fastball command by 10%?"')
+        print('  python llm_agent.py '
+              '"What is the probability Cole gets Judge out?"')
+        print('  python llm_agent.py '
+              '"Should Cole throw more breaking balls?"')
+        print('  python llm_agent.py '
+              '"What if Cole improves fastball command by 10%?"')
         print("\nRunning demo queries...\n")
 
         queries = [
