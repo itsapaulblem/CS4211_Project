@@ -11,50 +11,50 @@ Pitch = pcase {
 };
 
 FastPitch = pcase {
-    55 : FastSwing
-    45  : FastTake
+    43 : FastSwing
+    57  : FastTake
 };
 
 FastTake = pcase {
-    55 : fast_called_strike -> HandleStrike
-    45 : fast_ball -> HandleBall
+    54 : fast_called_strike -> HandleStrike
+    46 : fast_ball -> HandleBall
 };
 
 FastSwing = pcase {
-    13   : fast_whiff -> HandleStrike
-    87 : FastContact
+    16   : fast_whiff -> HandleStrike
+    84 : FastContact
 };
 
 FastContact = pcase {
     19 : fast_foul -> HandleFoul
-    46  : fast_out  -> HandleInPlayOut
-    35  : fast_hit  -> HandleHit
+    43  : fast_out  -> HandleInPlayOut
+    38  : fast_hit  -> HandleHit
 };
 
 BreakPitch = pcase {
-    43 : BreakSwing
-    57  : BreakTake
+    31 : BreakSwing
+    69  : BreakTake
 };
 
 BreakTake = pcase {
-    38 : break_called_strike -> HandleStrike
-    62 : break_ball -> HandleBall
+    37 : break_called_strike -> HandleStrike
+    63 : break_ball -> HandleBall
 };
 
 BreakSwing = pcase {
-    27   : break_whiff -> HandleStrike
-    73 : BreakContact
+    22   : break_whiff -> HandleStrike
+    78 : BreakContact
 };
 
 BreakContact = pcase {
-    19 : break_foul -> HandleFoul
-    46  : break_out  -> HandleInPlayOut
-    35  : break_hit  -> HandleHit
+    18 : break_foul -> HandleFoul
+    41  : break_out  -> HandleInPlayOut
+    41  : break_hit  -> HandleHit
 };
 
 OffPitch = pcase {
-    41 : OffSwing
-    59  : OffTake
+    34 : OffSwing
+    66  : OffTake
 };
 
 OffTake = pcase {
@@ -63,14 +63,14 @@ OffTake = pcase {
 };
 
 OffSwing = pcase {
-    27   : off_whiff -> HandleStrike
-    73 : OffContact
+    29   : off_whiff -> HandleStrike
+    71 : OffContact
 };
 
 OffContact = pcase {
-    19 : off_foul -> HandleFoul
-    46  : off_out  -> HandleInPlayOut
-    35  : off_hit  -> HandleHit
+    16 : off_foul -> HandleFoul
+    38  : off_out  -> HandleInPlayOut
+    46  : off_hit  -> HandleHit
 };
 
 HandleStrike =
