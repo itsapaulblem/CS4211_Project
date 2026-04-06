@@ -444,16 +444,32 @@ def export_matchup_json(pitcher_name: str, batter_name: str,
                         path: str = "data/matchup.json",
                         season: int = SEASON) -> dict:
     """
-    Saves a matchup dict to JSON so other team members (Tresa, Sigrid) can
-    load it without re-running the Statcast API calls.
+    Fetches live data and saves the matchup dict to JSON for reproducible
+    results across runs.
     """
     import os
     os.makedirs(os.path.dirname(path), exist_ok=True)
     matchup = get_matchup(pitcher_name, batter_name, season)
+    payload = {"pitcher": pitcher_name, "batter": batter_name,
+               "season": season, **matchup}
     with open(path, "w") as f:
-        json.dump(matchup, f, indent=2)
+        json.dump(payload, f, indent=2)
     print(f"\nSaved to {path}")
     return matchup
+
+
+def load_matchup_json(path: str = "data/matchup.json") -> dict:
+    """
+    Load a previously exported matchup JSON. Returns the parameter dict
+    (without the pitcher/batter/season metadata).
+    """
+    with open(path) as f:
+        data = json.load(f)
+    params = {k: v for k, v in data.items()
+              if k not in ("pitcher", "batter", "season")}
+    print(f"[cache] Loaded matchup from {path}"
+          f" ({data.get('pitcher', '?')} vs {data.get('batter', '?')})")
+    return params
 
 
 # ── CLI / smoke test ────────────────────────────────────────────────────────
