@@ -1,5 +1,4 @@
 pandas
 pybaseball
 python-dotenv
-google-genai
 google-generativeai

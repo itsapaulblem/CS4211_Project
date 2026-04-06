@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 from dotenv import load_dotenv
-from data_parser import get_matchup
+from data_parser import get_matchup, load_matchup_json
 
 load_dotenv()
 
@@ -204,13 +204,15 @@ def run_sensitivity_analysis(
     from_pitch: str,
     to_pitch: str,
     step: int = 5,
+    matchup: dict = None,
 ) -> dict:
     """
     Compute baseline pitcherWinProb, apply one pitch-mix perturbation,
     rerun PAT, and return a structured result with the delta.
     """
-    print(f"Fetching matchup data for {pitcher} vs {batter}...")
-    matchup = get_matchup(pitcher, batter)
+    if matchup is None:
+        print(f"Fetching matchup data for {pitcher} vs {batter}...")
+        matchup = get_matchup(pitcher, batter)
     baseline_mix = {k: matchup[PITCH_MIX_KEYS[k]] for k in PITCH_TYPES}
 
     print("Running baseline through PAT...")
@@ -248,13 +250,15 @@ def run_optimization(
     batter: str,
     step: int = 5,
     min_pct: int = 5,
+    matchup: dict = None,
 ) -> dict:
     """
     Sweep all legal pitch-mix candidates and return the one that
     maximises pitcherWinProb.
     """
-    print(f"Fetching matchup data for {pitcher} vs {batter}...")
-    matchup = get_matchup(pitcher, batter)
+    if matchup is None:
+        print(f"Fetching matchup data for {pitcher} vs {batter}...")
+        matchup = get_matchup(pitcher, batter)
     baseline_mix = {k: matchup[PITCH_MIX_KEYS[k]] for k in PITCH_TYPES}
 
     print("Running baseline through PAT...")
@@ -387,6 +391,10 @@ def build_cli() -> argparse.ArgumentParser:
         "--step", type=int, default=5,
         help="Percentage points to shift (default: 5)",
     )
+    sens.add_argument(
+        "--use-cached", action="store_true",
+        help="Load matchup from data/matchup.json instead of fetching live",
+    )
 
     opt = sub.add_parser("optimize", help="Sweep all legal pitch mixes")
     opt.add_argument("pitcher", help="Pitcher full name")
@@ -399,6 +407,10 @@ def build_cli() -> argparse.ArgumentParser:
         "--min-pct", type=int, default=5,
         help="Minimum percentage per pitch type (default: 5)",
     )
+    opt.add_argument(
+        "--use-cached", action="store_true",
+        help="Load matchup from data/matchup.json instead of fetching live",
+    )
 
     return parser
 
@@ -408,6 +420,8 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
+        matchup = load_matchup_json() if args.use_cached else None
+
         if args.mode == "sensitivity":
             if args.from_pitch == args.to_pitch:
                 parser.error("--from and --to must be different pitch types")
@@ -415,6 +429,7 @@ def main() -> None:
                 args.pitcher, args.batter,
                 args.from_pitch, args.to_pitch,
                 args.step,
+                matchup=matchup,
             )
             print(format_sensitivity_result(result))
 
@@ -422,6 +437,7 @@ def main() -> None:
             result = run_optimization(
                 args.pitcher, args.batter,
                 args.step, args.min_pct,
+                matchup=matchup,
             )
             print(format_optimization_result(result))
 

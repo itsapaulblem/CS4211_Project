@@ -3,7 +3,7 @@ import re
 import os
 import sys
 from dotenv import load_dotenv
-from data_parser import get_matchup
+from data_parser import get_matchup, load_matchup_json
 
 load_dotenv()
 
@@ -34,8 +34,9 @@ def delete_matchup_output(project_dir: str | None = None) -> str:
     return output_path
 
 
-def generate_matchup_pcsp(pitcher, batter):
-    matchup = get_matchup(pitcher, batter)
+def generate_matchup_pcsp(pitcher, batter, matchup=None):
+    if matchup is None:
+        matchup = get_matchup(pitcher, batter)
 
     with open("baseball_template.pcsp", "r") as f:
         content = f.read()
@@ -106,14 +107,18 @@ def run_pat_model():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python auto_matchup.py \"Pitcher Name\" \"Batter Name\"")
+    use_cached = "--use-cached" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--use-cached"]
+
+    if len(args) != 2:
+        print("Usage: python auto_matchup.py \"Pitcher Name\" \"Batter Name\" [--use-cached]")
         sys.exit(1)
 
-    pitcher = sys.argv[1]
-    batter = sys.argv[2]
+    pitcher = args[0]
+    batter = args[1]
 
-    generate_matchup_pcsp(pitcher, batter)
+    matchup = load_matchup_json() if use_cached else None
+    generate_matchup_pcsp(pitcher, batter, matchup)
 
     try:
         result = run_pat_model()
