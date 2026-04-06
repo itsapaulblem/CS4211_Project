@@ -169,9 +169,9 @@ Four types of queries are supported:
 | Query type | Example | What happens |
 |---|---|---|
 | **Prediction** | "What is the probability Cole gets Judge out?" | 1 PAT run |
-| **What-if** | "What if Cole's fastball command improves by 10%?" | 2 PAT runs |
-| **Pitch-mix shift** | "Should Cole throw more breaking balls?" | 2 PAT runs |
-| **Optimal mix** | "What is the optimal pitch mix for Cole vs Judge?" | N PAT runs |
+| **What-if (proportional)** | "What if Cole increases fastballs by 5%?" | 2 PAT runs — proportionally adjusts the rest |
+| **What-if (explicit shift)** | "What if Cole shifts 5% from fastballs to breaking balls?" | 2 PAT runs — shifts between two specific types |
+| **Optimal mix** | "What is the optimal pitch mix for Cole against Judge?" | N PAT runs — full grid sweep |
 
 ### Prediction queries (1 PAT run)
 
@@ -183,25 +183,26 @@ python llm_agent.py "Who wins the Cole vs Judge at-bat?"
 python llm_agent.py "What are the win odds for Spencer Strider against Mookie Betts?"
 ```
 
-### What-if queries (2 PAT runs)
+### What-if queries — proportional adjustment (2 PAT runs)
 
-Test the effect of changing a pitch-mix parameter. The agent automatically adjusts complement parameters to keep sums valid.
+Specify only the pitch type to change. The agent **proportionally adjusts the remaining types** to keep the mix summing to 100. For example, increasing fastballs by 5% will proportionally decrease both breaking balls and offspeed.
 
 ```sh
-python llm_agent.py "What if Cole throws 10% more fastballs against Judge?"
-python llm_agent.py "What if Cole reduces his offspeed usage by 5%?"
-python llm_agent.py "What happens if Cole increases breaking balls by 10% against Judge?"
+# Increase one type — the others decrease proportionally
+python llm_agent.py "What if Cole increases fastball usage by 5% against Judge?"
+python llm_agent.py "What if Cole throws 10% more breaking balls against Judge?"
+python llm_agent.py "What if Cole reduces his offspeed usage against Judge?" # Without specifying %
 ```
 
-### Pitch-mix shift queries (2 PAT runs)
+### What-if queries — explicit shift (2 PAT runs)
 
-Test shifting percentage points between pitch types. Delegates to `strategy_analysis.py` sensitivity mode.
+Specify **both** the pitch type to increase and the one to decrease. This shifts percentage points between exactly two types, leaving the third unchanged. Delegates to `strategy_analysis.py` sensitivity mode.
 
 ```sh
-python llm_agent.py "Should Cole throw more breaking balls against Judge?"
-python llm_agent.py "Should Cole throw fewer fastballs and more offspeed?"
-python llm_agent.py "What happens if Cole shifts 10% from fastballs to breaking balls against Judge?"
-python llm_agent.py "Would Cole benefit from throwing more offspeed to Judge?"
+# Shift between two specific types — the third stays the same
+python llm_agent.py "What if Cole shifts 5% from fastballs to breaking balls against Judge?"
+python llm_agent.py "What if Cole throws fewer fastballs and more offspeed against Judge?"
+python llm_agent.py "What happens if Cole increases offspeed and decreases breaking balls against Judge?" # Without specifying %
 ```
 
 ### Optimal pitch-mix queries (N PAT runs)
