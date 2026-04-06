@@ -26,6 +26,7 @@ Requirements:
   - pip install openai (or google-generativeai) for real LLM calls
 """
 
+from google.genai import types
 from data_parser import get_matchup
 import json
 import os
@@ -146,18 +147,22 @@ def call_llm(user_query: str) -> dict:
     # raw = resp.choices[0].message.content
 
     # ----- OPTION B: Google Gemini -----
-    import google.generativeai as genai
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-2.5-flash-lite",
-                                  system_instruction=SYSTEM_PROMPT)
-    raw = model.generate_content(user_query).text
+    from google import genai
+
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-lite",
+        contents=user_query,
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+    )
+    raw = response.text
 
     # ----- MOCK (testing without API key) -----
     # raw = _mock_llm(user_query)
 
-    # raw = raw.strip()
-    # raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    # raw = re.sub(r"\s*```$", "", raw)
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
 
     tool_call = json.loads(raw)
     _validate(tool_call)
