@@ -2,45 +2,43 @@
 llm_agent.py — LLM Agent Layer
 ===================================================================
 Sits on top of the existing pipeline:
-  - data_parser.py     → get_matchup(), generate_pcsp_defines()
-  - auto_update_pcsp.py → generates matchup.pcsp from template
-  - auto_matchup.py     → runs PAT and returns probabilities
+  - data_parser.py       → get_matchup()
+  - strategy_analysis.py → run_pat_on_matchup(), run_sensitivity_analysis(),
+                           run_optimization()
 
-Classification format:
+Classification format (from LLM):
   { "intent": "prediction | strategy",
-    "analysis_type": "reachability | sensitivity" }
+    "analysis_type": "reachability | sensitivity | optimize" }
 
-Three execution paths:
+Four execution paths:
   prediction + reachability  → 1 PAT run (base model)
-  prediction + sensitivity   → 2 PAT runs (base vs modified)
-  strategy   + sensitivity   → N PAT runs (grid search, find best)
+  prediction + sensitivity   → 2 PAT runs (base vs modified parameter)
+  strategy   + sensitivity   → 2 PAT runs (base vs shifted pitch mix)
+  strategy   + optimize      → N PAT runs (grid sweep, find best mix)
 
 Usage:
   python llm_agent.py "What is the probability Cole gets Judge out?"
   python llm_agent.py "Should Cole throw more breaking balls against Judge?"
   python llm_agent.py "What if Cole improves his fastball command by 10%?"
-
-Requirements:
-  - All existing project dependencies (see requirements.txt)
-  - .env configured with PROJECT_DIR and PAT_EXE
-  - pip install openai (or google-generativeai) for real LLM calls
+  python llm_agent.py "What is the optimal pitch mix for Cole against Judge?"
 """
 
-from data_parser import get_matchup
 import json
 import os
 import re
-import subprocess
 import sys
+
 from dotenv import load_dotenv
+from data_parser import get_matchup
+from strategy_analysis import (
+    run_pat_on_matchup,
+    run_sensitivity_analysis,
+    run_optimization,
+    format_sensitivity_result,
+    format_optimization_result,
+)
 
-# Load project paths from .env
 load_dotenv()
-PROJECT_DIR = os.getenv("PROJECT_DIR", "")
-PAT_EXE = os.getenv("PAT_EXE", "")
-
-# Import existing project modules
-sys.path.insert(0, PROJECT_DIR)
 
 
 # ============================================================================
@@ -58,67 +56,88 @@ Pitcher (9): P_FAST_PCT / P_BREAK_PCT / P_OFF_PCT (pitch mix, sum=100),
   P_FAST_ZONE/MISS, P_BREAK_ZONE/MISS, P_OFF_ZONE/MISS (zone accuracy,
   pairs sum=100)
 
-Batter (18+): B_FAST_SWING/TAKE, B_BREAK_SWING/TAKE, B_OFF_SWING/TAKE,
+Batter (21): B_FAST_SWING/TAKE, B_BREAK_SWING/TAKE, B_OFF_SWING/TAKE,
   B_FAST_WHIFF/CONTACT, B_BREAK_WHIFF/CONTACT, B_OFF_WHIFF/CONTACT,
   B_FAST_FOUL/OUT/HIT, B_BREAK_FOUL/OUT/HIT, B_OFF_FOUL/OUT/HIT
 
 Terminal: pitcherWins (result==1) vs batterWins (result==2)
 
-OUTPUT FORMAT — always a JSON with these fields:
+OUTPUT FORMAT — always a JSON object with these fields:
   "intent":        "prediction" or "strategy"
-  "analysis_type": "reachability" or "sensitivity"
+  "analysis_type": "reachability", "sensitivity", or "optimize"
   "pitcher":       full pitcher name (e.g. "Gerrit Cole")
   "batter":        full batter name (e.g. "Aaron Judge")
 
 Additional fields depending on combination:
-  prediction + sensitivity: "parameter" (PCSP# param name), "delta" (int)
-  strategy + sensitivity:   "parameter_to_vary"
-    ("pitch_mix"|"zone_accuracy"|"swing_rate"|"all")
 
-THE 3 COMBINATIONS:
+  prediction + sensitivity:
+    "parameter": PCSP# param name (e.g. "P_FAST_ZONE")
+    "delta":     signed int (e.g. 10 or -5)
+
+  strategy + sensitivity:
+    "from_pitch": pitch type to REDUCE  ("fast", "break", or "off")
+    "to_pitch":   pitch type to INCREASE ("fast", "break", or "off")
+    "step":       percentage points to shift (int, default 5)
+
+  strategy + optimize:
+    "step":    grid step size in percent (int, default 5)
+    "min_pct": minimum percentage per pitch type (int, default 5)
+
+THE 4 COMBINATIONS:
 
 1. prediction + reachability
    → "What is the probability Cole gets Judge out?"
    Fields: pitcher, batter
 
-2. strategy + sensitivity
-   → "Should Cole throw more breaking balls against Judge?"
-   Fields: pitcher, batter, parameter_to_vary
-
-3. prediction + sensitivity
+2. prediction + sensitivity
    → "What if Cole's fastball command improves by 10%?"
    Fields: pitcher, batter, parameter, delta
 
+3. strategy + sensitivity
+   → "Should Cole throw more breaking balls against Judge?"
+   Fields: pitcher, batter, from_pitch, to_pitch, step
+
+4. strategy + optimize
+   → "What is the optimal pitch mix for Cole against Judge?"
+   Fields: pitcher, batter, step, min_pct
+
 RULES:
 - NEVER guess probabilities. Always use a tool.
-- Output ONLY a valid JSON object. No markdown, no explanation.
+- Output ONLY a valid JSON object. No markdown fences, no explanation.
 - Use FULL NAMES (e.g. "Gerrit Cole", not "Cole").
+- When the user asks about "more" of a pitch type, set to_pitch to that
+  type and from_pitch to a different one (usually "fast").
 
 EXAMPLES:
 
 User: "What is the probability Gerrit Cole gets Aaron Judge out?"
 {"intent": "prediction", "analysis_type": "reachability",
-    "pitcher": "Gerrit Cole", "batter": "Aaron Judge"}
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge"}
 
 User: "Should Cole throw more breaking balls against Judge?"
 {"intent": "strategy", "analysis_type": "sensitivity",
-    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
-    "parameter_to_vary": "pitch_mix"}
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "from_pitch": "fast", "to_pitch": "break", "step": 5}
 
 User: "What if Cole's fastball command improves by 10%?"
 {"intent": "prediction", "analysis_type": "sensitivity",
-    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
-    "parameter": "P_FAST_ZONE", "delta": 10}
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "parameter": "P_FAST_ZONE", "delta": 10}
 
 User: "What is the optimal pitch mix for Cole against Judge?"
-{"intent": "strategy", "analysis_type": "sensitivity",
-    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
-    "parameter_to_vary": "pitch_mix"}
+{"intent": "strategy", "analysis_type": "optimize",
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "step": 5, "min_pct": 5}
 
 User: "How much does a 5% decrease in Judge's chase rate help Cole?"
 {"intent": "prediction", "analysis_type": "sensitivity",
-    "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
-    "parameter": "B_BREAK_SWING", "delta": -5}
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "parameter": "B_BREAK_SWING", "delta": -5}
+
+User: "Should Cole throw fewer fastballs and more offspeed?"
+{"intent": "strategy", "analysis_type": "sensitivity",
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "from_pitch": "fast", "to_pitch": "off", "step": 5}
 """
 
 
@@ -127,10 +146,7 @@ User: "How much does a 5% decrease in Judge's chase rate help Cole?"
 # ============================================================================
 
 def call_llm(user_query: str) -> dict:
-    """
-    Send query to LLM, get structured JSON.
-    Uncomment your preferred API below.
-    """
+    """Send query to LLM, get structured JSON classification."""
 
     # ----- OPTION A: OpenAI -----
     # from openai import OpenAI
@@ -148,16 +164,18 @@ def call_llm(user_query: str) -> dict:
     # ----- OPTION B: Google Gemini -----
     import google.generativeai as genai
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-2.5-flash-lite",
-                                  system_instruction=SYSTEM_PROMPT)
+    model = genai.GenerativeModel(
+        "gemini-2.5-flash-lite",
+        system_instruction=SYSTEM_PROMPT,
+    )
     raw = model.generate_content(user_query).text
 
     # ----- MOCK (testing without API key) -----
     # raw = _mock_llm(user_query)
 
-    # raw = raw.strip()
-    # raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    # raw = re.sub(r"\s*```$", "", raw)
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
 
     tool_call = json.loads(raw)
     _validate(tool_call)
@@ -170,243 +188,63 @@ def _mock_llm(query: str) -> str:
     pitcher = "Gerrit Cole"
     batter = "Aaron Judge"
 
-    # strategy + sensitivity
     if any(re.search(kw, q) for kw in [
-        r"should.*throw", r"how should", r"best.*mix",
-        r"optimal", r"more breaking", r"more fastball",
+        r"optimal", r"best.*mix", r"optimize",
     ]):
         return json.dumps({
-            "intent": "strategy",
-            "analysis_type": "sensitivity",
-            "pitcher": pitcher,
-            "batter": batter,
-            "parameter_to_vary": "pitch_mix",
+            "intent": "strategy", "analysis_type": "optimize",
+            "pitcher": pitcher, "batter": batter,
+            "step": 5, "min_pct": 5,
         })
 
-    # prediction + sensitivity
+    if any(re.search(kw, q) for kw in [
+        r"should.*throw", r"how should", r"more breaking",
+        r"more fastball", r"fewer",
+    ]):
+        return json.dumps({
+            "intent": "strategy", "analysis_type": "sensitivity",
+            "pitcher": pitcher, "batter": batter,
+            "from_pitch": "fast", "to_pitch": "break", "step": 5,
+        })
+
     if any(re.search(kw, q) for kw in [
         r"what happens if", r"what if.*improve", r"what if.*change",
         r"what if.*increase", r"what if.*decrease", r"how much does",
     ]):
         return json.dumps({
-            "intent": "prediction",
-            "analysis_type": "sensitivity",
-            "pitcher": pitcher,
-            "batter": batter,
-            "parameter": "P_FAST_ZONE",
-            "delta": 10,
+            "intent": "prediction", "analysis_type": "sensitivity",
+            "pitcher": pitcher, "batter": batter,
+            "parameter": "P_FAST_ZONE", "delta": 10,
         })
 
-    # prediction + reachability (default)
     return json.dumps({
-        "intent": "prediction",
-        "analysis_type": "reachability",
-        "pitcher": pitcher,
-        "batter": batter,
+        "intent": "prediction", "analysis_type": "reachability",
+        "pitcher": pitcher, "batter": batter,
     })
 
 
 def _validate(tc: dict):
-    assert tc.get("intent") in ("prediction", "strategy"), \
-        f"intent must be prediction|strategy, got {tc.get('intent')}"
-    assert tc.get("analysis_type") in ("reachability", "sensitivity"), \
-        f"analysis_type must be reachability|sensitivity, " \
-        f"got {tc.get('analysis_type')}"
+    """Validate the LLM's JSON response has all required fields."""
+    intent = tc.get("intent")
+    analysis = tc.get("analysis_type")
+
+    assert intent in ("prediction", "strategy"), \
+        f"intent must be prediction|strategy, got {intent}"
+    assert analysis in ("reachability", "sensitivity", "optimize"), \
+        f"analysis_type must be reachability|sensitivity|optimize, got {analysis}"
     assert "pitcher" in tc and "batter" in tc, \
         "Must include pitcher and batter"
 
-    if tc["intent"] == "prediction" and tc["analysis_type"] == "sensitivity":
+    if intent == "prediction" and analysis == "sensitivity":
         assert "parameter" in tc and "delta" in tc, \
             "prediction + sensitivity requires parameter and delta"
-    if tc["intent"] == "strategy" and tc["analysis_type"] == "sensitivity":
-        assert "parameter_to_vary" in tc, \
-            "strategy + sensitivity requires parameter_to_vary"
+    if intent == "strategy" and analysis == "sensitivity":
+        assert "from_pitch" in tc and "to_pitch" in tc, \
+            "strategy + sensitivity requires from_pitch and to_pitch"
 
 
 # ============================================================================
-# INTEGRATION WITH EXISTING PIPELINE
-# ============================================================================
-
-def fetch_stats(pitcher: str, batter: str) -> dict:
-    """
-    Uses data_parser.get_matchup() to fetch real MLB Statcast data.
-    Returns the parameter dict with all 30 PCSP# parameters.
-    """
-    print(f"[Data] Fetching stats: {pitcher} vs {batter}")
-    return get_matchup(pitcher, batter)
-
-
-# def build_model(stats: dict, pitcher: str, batter: str,
-#                 output_path: str = "matchup.pcsp") -> str:
-#     """
-#     Reads baseball_template.pcsp, injects stats via generate_pcsp_defines(),
-#     writes the output .pcsp file.
-#     """
-#     define_block = generate_pcsp_defines(stats)
-#     template_path = os.path.join(PROJECT_DIR, "baseball_template.pcsp")
-
-#     with open(template_path, "r") as f:
-#         content = f.read()
-
-#     # Replace the define block
-#     pattern = r"\A(?:\s*//.*\n|\s*#define[^\n]*\n|\s*\n)*?(?=\s*var\s+)"
-#     new_content = re.sub(pattern, define_block + "\n", content,
-#                          count=1, flags=re.MULTILINE)
-
-#     # Remove comments
-#     new_content = re.sub(r"//.*", "", new_content).lstrip()
-
-#     full_output = os.path.join(PROJECT_DIR, output_path)
-#     with open(full_output, "w") as f:
-#         f.write(new_content)
-
-#     print(f"[Model] Generated: {full_output}")
-#     return full_output
-
-def build_model(stats: dict, pitcher: str, batter: str,
-                output_path: str = "matchup.pcsp") -> str:
-    template_path = os.path.join(PROJECT_DIR, "baseball_template.pcsp")
-
-    with open(template_path, "r") as f:
-        content = f.read()
-
-    for key, val in stats.items():
-        content = content.replace(f"{{{{{key}}}}}", str(val))
-
-    full_output = os.path.join(PROJECT_DIR, output_path)
-    with open(full_output, "w") as f:
-        f.write(content)
-
-    print(f"[Model] Generated: {full_output}")
-    return full_output
-
-
-def build_perturbed_model(stats: dict, pitcher: str, batter: str,
-                          parameter: str, delta: int,
-                          output_path: str = None) -> str:
-    """
-    Copy stats, perturb one parameter, fix complements, build model.
-    """
-    modified = dict(stats)
-    old_val = modified[parameter]
-    new_val = max(1, min(99, old_val + delta))
-    modified[parameter] = new_val
-
-    # Fix complement groups so sums stay at 100
-    _fix_complements(parameter, modified, old_val, new_val)
-
-    if output_path is None:
-        sign = '+' if delta > 0 else ''
-        output_path = f"matchup_{parameter}_{sign}{delta}.pcsp"
-
-    return build_model(modified, pitcher, batter, output_path)
-
-
-def run_pat(pcsp_file: str) -> dict:
-    """
-    Runs PAT on a .pcsp file and parses the probability output.
-    Matches the exact approach used in auto_matchup.py:
-      - Windows: WSL + mono, writes output to a file
-      - macOS/Linux: mono directly, writes output to a file
-    Returns: {"pitcherWins_prob": float, "batterWins_prob": float}
-    """
-    print(f"[PAT] Running: {pcsp_file}")
-
-    if not PAT_EXE:
-        print("[PAT] WARNING: PAT_EXE not set in .env — returning stub values")
-        return {"pitcherWins_prob": 0.634, "batterWins_prob": 0.366}
-
-    pcsp_abs = os.path.abspath(pcsp_file)
-    # output_file = os.path.splitext(pcsp_abs)[0] + "_output.txt"
-    # output_abs = os.path.abspath(output_file)
-    output_filename = os.path.splitext(os.path.basename(pcsp_abs))[
-        0] + "_output.txt"
-
-    output_file = os.path.join(PROJECT_DIR, output_filename)
-    output_abs = os.path.abspath(output_file)
-
-    import platform
-    system = platform.system()
-
-    if system == "Windows":
-        # WSL path conversion
-        def to_wsl_path(win_path):
-            return (
-                "/mnt/" +
-                win_path.replace("\\", "/")
-                .replace(":", "")
-                .lower()
-            )
-
-        cmd = [
-            "wsl", "mono",
-            to_wsl_path(PAT_EXE),
-            "-pcsp",
-            to_wsl_path(pcsp_abs),
-            to_wsl_path(output_abs),
-        ]
-    elif system == "Darwin":  # macOS
-        cmd = ["mono", PAT_EXE, "-pcsp", pcsp_abs, output_abs]
-    else:  # Linux
-        cmd = ["mono", PAT_EXE, "-pcsp", pcsp_abs, output_abs]
-
-    # try:
-    #     subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    # except subprocess.TimeoutExpired:
-    #     print("[PAT] ERROR: Timed out after 120s")
-    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-    # except FileNotFoundError:
-    #     print("[PAT] ERROR: WSL/mono/PAT not found—"
-    #           "check .env and WSL install")
-    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-    # except Exception as e:
-    #     print(f"[PAT] ERROR: {e}")
-    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-
-    # # Read output from file
-    # try:
-    #     with open(output_file, "r") as f:
-    #         output = f.read()
-    # except FileNotFoundError:
-    #     print(f"[PAT] ERROR: Output file not created: {output_file}")
-    #     return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-
-    try:
-        subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        with open(output_file, "r") as f:
-            output = f.read()
-    except subprocess.TimeoutExpired:
-        print("[PAT] ERROR: Timed out after 120s")
-        return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-    except FileNotFoundError:
-        print("[PAT] ERROR: WSL/mono/PAT not found — "
-              "check .env and WSL install")
-        return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-    except Exception as e:
-        print(f"[PAT] ERROR: {e}")
-        return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-
-    # Parse probabilities
-    probs_list = re.findall(r"Probability \[([0-9.]+),", output)
-
-    if len(probs_list) >= 2:
-        return {
-            "pitcherWins_prob": float(probs_list[0]),
-            "batterWins_prob": float(probs_list[1]),
-        }
-    elif len(probs_list) == 1:
-        p = float(probs_list[0])
-        return {
-            "pitcherWins_prob": p,
-            "batterWins_prob": round(1.0 - p, 4),
-        }
-    else:
-        print(f"[PAT] WARNING: Could not parse output:\n{output[:500]}")
-        return {"pitcherWins_prob": 0.0, "batterWins_prob": 0.0}
-
-
-# ============================================================================
-# COMPLEMENT GROUPS (must sum to 100)
+# COMPLEMENT GROUPS (for prediction + sensitivity perturbations)
 # ============================================================================
 
 COMPLEMENT_GROUPS = {
@@ -425,18 +263,10 @@ COMPLEMENT_GROUPS = {
     "off_contact":   ["B_OFF_FOUL", "B_OFF_OUT", "B_OFF_HIT"],
 }
 
-PARAM_GROUPS_FOR_STRATEGY = {
-    "pitch_mix":     ["P_FAST_PCT", "P_BREAK_PCT", "P_OFF_PCT"],
-    "zone_accuracy": ["P_FAST_ZONE", "P_BREAK_ZONE", "P_OFF_ZONE"],
-    "swing_rate":    ["B_FAST_SWING", "B_BREAK_SWING", "B_OFF_SWING"],
-}
-
-DELTAS = [-10, -5, 5, 10]
-
 
 def _fix_complements(param_name: str, stats: dict, old_val: int, new_val: int):
-    """After changing one parameter, adjust its group to keep sum = 100."""
-    for group_name, members in COMPLEMENT_GROUPS.items():
+    """After changing one parameter, adjust its complement group to keep sum = 100."""
+    for _group_name, members in COMPLEMENT_GROUPS.items():
         if param_name in members:
             others = [m for m in members if m != param_name]
             diff = new_val - old_val
@@ -450,7 +280,6 @@ def _fix_complements(param_name: str, stats: dict, old_val: int, new_val: int):
                 for m in others:
                     share = stats[m] / other_total
                     stats[m] = max(1, round(stats[m] - diff * share))
-                # Fix rounding
                 current_sum = sum(stats[m] for m in members)
                 if current_sum != 100:
                     stats[others[0]] += (100 - current_sum)
@@ -462,6 +291,7 @@ def _fix_complements(param_name: str, stats: dict, old_val: int, new_val: int):
 # ============================================================================
 
 def execute_tool(tc: dict) -> dict:
+    """Route the classified intent to the appropriate execution path."""
     intent = tc["intent"]
     analysis = tc["analysis_type"]
     pitcher = tc["pitcher"]
@@ -469,88 +299,83 @@ def execute_tool(tc: dict) -> dict:
 
     if intent == "prediction" and analysis == "reachability":
         return _prediction_reachability(pitcher, batter)
-    elif intent == "prediction" and analysis == "sensitivity":
+
+    if intent == "prediction" and analysis == "sensitivity":
         return _prediction_sensitivity(
-            pitcher, batter, tc["parameter"], tc["delta"])
-    elif intent == "strategy" and analysis == "sensitivity":
-        param_to_vary = tc.get("parameter_to_vary", "all")
-        return _strategy_sensitivity(pitcher, batter, param_to_vary)
-    elif intent == "strategy" and analysis == "reachability":
-        return _prediction_reachability(pitcher, batter)
+            pitcher, batter, tc["parameter"], int(tc["delta"]))
+
+    if intent == "strategy" and analysis == "sensitivity":
+        return _strategy_sensitivity(
+            pitcher, batter,
+            tc["from_pitch"], tc["to_pitch"],
+            int(tc.get("step", 5)))
+
+    if intent == "strategy" and analysis == "optimize":
+        return _strategy_optimize(
+            pitcher, batter,
+            int(tc.get("step", 5)),
+            int(tc.get("min_pct", 5)))
+
+    return _prediction_reachability(pitcher, batter)
 
 
 def _prediction_reachability(pitcher: str, batter: str) -> dict:
-    """1 model → 1 PAT run → return probabilities."""
-    stats = fetch_stats(pitcher, batter)
-    pcsp_file = build_model(stats, pitcher, batter)
-    result = run_pat(pcsp_file)
+    """Single PAT run → return win probabilities."""
+    print(f"[Data] Fetching stats: {pitcher} vs {batter}")
+    stats = get_matchup(pitcher, batter)
+    result = run_pat_on_matchup(stats)
     return {
-        "intent": "prediction", "analysis_type": "reachability",
-        "pitcher": pitcher, "batter": batter, **result,
+        "type": "reachability",
+        "pitcher": pitcher,
+        "batter": batter,
+        "pitcherWinProb": result["pitcherWinProb"],
+        "batterWinProb": result["batterWinProb"],
     }
 
 
 def _prediction_sensitivity(pitcher: str, batter: str,
                             parameter: str, delta: int) -> dict:
-    """2 models → compare base vs modified."""
-    stats = fetch_stats(pitcher, batter)
+    """Two PAT runs: base vs one modified parameter."""
+    print(f"[Data] Fetching stats: {pitcher} vs {batter}")
+    stats = get_matchup(pitcher, batter)
 
-    base_file = build_model(stats, pitcher, batter, "matchup_base.pcsp")
-    base = run_pat(base_file)
+    print("[PAT] Running baseline...")
+    base_prob = run_pat_on_matchup(stats)["pitcherWinProb"]
 
-    mod_file = build_perturbed_model(stats, pitcher, batter, parameter, delta)
-    modified = run_pat(mod_file)
+    modified = dict(stats)
+    old_val = modified[parameter]
+    new_val = max(1, min(99, old_val + delta))
+    modified[parameter] = new_val
+    _fix_complements(parameter, modified, old_val, new_val)
+
+    print(f"[PAT] Running with {parameter} {old_val} → {new_val}...")
+    mod_prob = run_pat_on_matchup(modified)["pitcherWinProb"]
 
     return {
-        "intent": "prediction", "analysis_type": "sensitivity",
-        "pitcher": pitcher, "batter": batter,
-        "parameter": parameter, "delta": delta,
-        "base_pitcherWins": base.get("pitcherWins_prob", 0),
-        "base_batterWins": base.get("batterWins_prob", 0),
-        "modified_pitcherWins": modified.get("pitcherWins_prob", 0),
-        "modified_batterWins": modified.get("batterWins_prob", 0),
-        "change": round(modified.get("pitcherWins_prob", 0) -
-                        base.get("pitcherWins_prob", 0), 4),
+        "type": "prediction_sensitivity",
+        "pitcher": pitcher,
+        "batter": batter,
+        "parameter": parameter,
+        "delta": delta,
+        "old_value": old_val,
+        "new_value": new_val,
+        "base_pitcherWinProb": round(base_prob, 5),
+        "modified_pitcherWinProb": round(mod_prob, 5),
+        "change": round(mod_prob - base_prob, 5),
     }
 
 
 def _strategy_sensitivity(pitcher: str, batter: str,
-                          param_to_vary: str) -> dict:
-    """N models → grid search → find optimal adjustment."""
-    stats = fetch_stats(pitcher, batter)
+                          from_pitch: str, to_pitch: str,
+                          step: int = 5) -> dict:
+    """Pitch-mix shift analysis via strategy_analysis module."""
+    return run_sensitivity_analysis(pitcher, batter, from_pitch, to_pitch, step)
 
-    base_file = build_model(stats, pitcher, batter, "matchup_base.pcsp")
-    base_prob = run_pat(base_file).get("pitcherWins_prob", 0)
 
-    if param_to_vary == "all":
-        params = [p for g in PARAM_GROUPS_FOR_STRATEGY.values() for p in g]
-    elif param_to_vary in PARAM_GROUPS_FOR_STRATEGY:
-        params = PARAM_GROUPS_FOR_STRATEGY[param_to_vary]
-    else:
-        params = [param_to_vary]
-
-    results = []
-    for param in params:
-        for delta in DELTAS:
-            pcsp_file = build_perturbed_model(
-                dict(stats), pitcher, batter, param, delta
-            )
-            prob = run_pat(pcsp_file).get("pitcherWins_prob", 0)
-            results.append({
-                "parameter": param, "delta": delta,
-                "pitcherWins_prob": prob,
-                "improvement": round(prob - base_prob, 4),
-            })
-
-    results.sort(key=lambda r: r["pitcherWins_prob"], reverse=True)
-
-    return {
-        "intent": "strategy", "analysis_type": "sensitivity",
-        "pitcher": pitcher, "batter": batter,
-        "base_pitcherWins": base_prob,
-        "best_adjustment": results[0] if results else {},
-        "all_results": results, "total_runs": len(results),
-    }
+def _strategy_optimize(pitcher: str, batter: str,
+                       step: int = 5, min_pct: int = 5) -> dict:
+    """Full pitch-mix optimisation sweep via strategy_analysis module."""
+    return run_optimization(pitcher, batter, step, min_pct)
 
 
 # ============================================================================
@@ -558,24 +383,40 @@ def _strategy_sensitivity(pitcher: str, batter: str,
 # ============================================================================
 
 SYNTHESIS_PROMPT = (
-    "You are a baseball coach. Given the formal model-checking "
-    "results below, provide a clear 3-5 sentence summary. Include exact "
-    "probabilities. Explain in plain baseball language. Do NOT change "
-    "numbers.\n\n"
+    "You are a baseball coach explaining formal model-checking results to a "
+    "player or manager. Provide a clear 3-5 sentence summary using plain "
+    "baseball language. Include the exact probabilities from the data — do NOT "
+    "round or change any numbers. Give actionable advice where applicable.\n\n"
     "User question: {query}\n"
-    "Result: {result_json}\n"
+    "Analysis result:\n{result_json}\n"
 )
 
 
 def synthesize(user_query: str, tc: dict, result: dict) -> str:
-    """Turn raw results into coaching advice."""
-    # TODO: In production, call LLM with SYNTHESIS_PROMPT
-    intent = tc["intent"]
-    analysis = tc["analysis_type"]
+    """Turn raw results into coaching advice, using LLM with template fallback."""
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel("gemini-2.5-flash-lite")
+        prompt = SYNTHESIS_PROMPT.format(
+            query=user_query,
+            result_json=json.dumps(result, indent=2),
+        )
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"[Synthesis] LLM failed ({e}), using template fallback")
+        return _template_synthesis(tc, result)
 
-    if intent == "prediction" and analysis == "reachability":
-        pw = result.get("pitcherWins_prob", 0)
-        bw = result.get("batterWins_prob", 0)
+
+def _template_synthesis(tc: dict, result: dict) -> str:
+    """Fallback template-based synthesis when LLM synthesis is unavailable."""
+    rtype = result.get("type", "")
+    mode = result.get("mode", "")
+
+    if rtype == "reachability":
+        pw = result.get("pitcherWinProb", 0)
+        bw = result.get("batterWinProb", 0)
         return (
             f"Based on formal model checking with real Statcast data: "
             f"{result['pitcher']} gets {result['batter']} out "
@@ -583,34 +424,25 @@ def synthesize(user_query: str, tc: dict, result: dict) -> str:
             f"while {result['batter']} reaches base {bw:.1%} (walk + hit)."
         )
 
-    elif intent == "prediction" and analysis == "sensitivity":
-        readable = result["parameter"].replace(
-            "P_", "").replace("B_", "").replace("_", " ").lower()
+    if rtype == "prediction_sensitivity":
+        readable = (result["parameter"]
+                    .replace("P_", "").replace("B_", "")
+                    .replace("_", " ").lower())
         change = result["change"]
         return (
-            f"If {readable} changes by {result['delta']:+d} points: "
+            f"If {readable} changes by {result['delta']:+d} points "
+            f"({result['old_value']} → {result['new_value']}): "
             f"pitcher-win probability moves from "
-            f"{result['base_pitcherWins']:.1%} to "
-            f"{result['modified_pitcherWins']:.1%} "
+            f"{result['base_pitcherWinProb']:.1%} to "
+            f"{result['modified_pitcherWinProb']:.1%} "
             f"({'+' if change > 0 else ''}{change:.2%})."
         )
 
-    elif intent == "strategy" and analysis == "sensitivity":
-        if not result.get("best_adjustment"):
-            return "No improvements found."
-        best = result["best_adjustment"]
-        readable = best["parameter"].replace("P_", "").replace(
-            "B_", "").replace("_", " ").lower()
-        direction = "increase" if best["delta"] > 0 else "decrease"
-        return (
-            f"Recommendation: {direction} {readable} by "
-            f"{abs(best['delta'])} percentage points. This moves "
-            f"pitcher-win probability from {result['base_pitcherWins']:.1%} "
-            f"to {best['pitcherWins_prob']:.1%} "
-            f"({'+' if best['improvement'] > 0 else ''}"
-            f"{best['improvement']:.2%}). "
-            f"Tested {result['total_runs']} variations."
-        )
+    if mode == "sensitivity":
+        return format_sensitivity_result(result)
+
+    if mode == "optimize":
+        return format_optimization_result(result)
 
     return json.dumps(result, indent=2)
 
@@ -625,17 +457,27 @@ def run_agent(user_query: str) -> str:
     print(f"User: {user_query}")
     print(f"{'='*60}")
 
-    print("\n[1] LLM classifying...")
+    print("\n[1] Classifying query...")
     tc = call_llm(user_query)
     print(f"    intent:        {tc['intent']}")
     print(f"    analysis_type: {tc['analysis_type']}")
     print(f"    pitcher:       {tc['pitcher']}")
     print(f"    batter:        {tc['batter']}")
+    if "parameter" in tc:
+        print(f"    parameter:     {tc['parameter']}")
+        print(f"    delta:         {tc['delta']}")
+    if "from_pitch" in tc:
+        print(f"    from_pitch:    {tc['from_pitch']}")
+        print(f"    to_pitch:      {tc['to_pitch']}")
+        print(f"    step:          {tc.get('step', 5)}")
+    if tc.get("analysis_type") == "optimize":
+        print(f"    step:          {tc.get('step', 5)}")
+        print(f"    min_pct:       {tc.get('min_pct', 5)}")
 
     print(f"\n[2] Executing: {tc['intent']} + {tc['analysis_type']}...")
     result = execute_tool(tc)
 
-    print("\n[3] Synthesizing...")
+    print("\n[3] Synthesizing response...")
     answer = synthesize(user_query, tc, result)
 
     print(f"\n{'='*60}")
@@ -651,19 +493,22 @@ if __name__ == "__main__":
     else:
         print("CS4211 Baseball AI Coach — LLM Agent Layer")
         print("=" * 45)
-        print('\nUsage:')
+        print("\nUsage:")
         print('  python llm_agent.py '
               '"What is the probability Cole gets Judge out?"')
         print('  python llm_agent.py '
               '"Should Cole throw more breaking balls?"')
         print('  python llm_agent.py '
               '"What if Cole improves fastball command by 10%?"')
+        print('  python llm_agent.py '
+              '"What is the optimal pitch mix for Cole vs Judge?"')
         print("\nRunning demo queries...\n")
 
         queries = [
             "What is the probability Gerrit Cole gets Aaron Judge out?",
             "Should Cole throw more breaking balls against Judge?",
             "What if Cole's fastball command improves by 10%?",
+            "What is the optimal pitch mix for Cole against Judge?",
         ]
         for q in queries:
             run_agent(q)

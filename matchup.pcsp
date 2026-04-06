@@ -32,8 +32,8 @@ FastContact = pcase {
 };
 
 BreakPitch = pcase {
-    39 : BreakSwing
-    61  : BreakTake
+    34 : BreakSwing
+    66  : BreakTake
 };
 
 BreakTake = pcase {

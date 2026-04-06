@@ -3,10 +3,12 @@
 
 **Key Files:**
 - `baseball_template.pcsp` — Parametric model template (do not edit directly)
-- `auto_update_pcsp.py` — Automates model generation for any pitcher/batter matchup
+- `auto_matchup.py` — Generates matchup model and runs PAT for a pitcher/batter pair
 - `data_parser.py` — Fetches real Statcast/Bat Tracking data, computes model parameters
+- `strategy_analysis.py` — Pitch-mix sensitivity analysis and optimisation (Part C)
+- `llm_agent.py` — Natural language agent powered by Gemini (LLM integration)
 - `matchup.pcsp` — Auto-generated model for a specific matchup (run this in PAT)
-- `data/matchup.json` — Stores parameter sets for matchups
+- **[USAGE.md](USAGE.md)** — CLI command reference and usage examples
 
 ---
 
@@ -18,25 +20,7 @@
 - The workflow is robust for most MLB players; missing data is handled gracefully with defaults and warnings.
 - The codebase is ready for demonstration, extension, and team collaboration.
 
-**How to Use:**
-1. **Generate a matchup model:**
-  ```sh
-  python auto_update_pcsp.py "Pitcher Name" "Batter Name"
-  ```
-  Example:
-  ```sh
-  python auto_update_pcsp.py "Gerrit Cole" "Aaron Judge"
-  ```
-  This creates `matchup.pcsp` with all real probabilities and up-to-date comments.
-
-2. **Run the model in PAT:**
-  - Open `matchup.pcsp` in PAT (or your PCSP# toolchain) and run reachability/sensitivity queries as described below.
-
-3. **(Optional) Export parameters for teammates:**
-  - Use `data_parser.py` to export a JSON file for use in other tools:
-    ```sh
-    python -c "import data_parser; data_parser.export_matchup_json('Gerrit Cole', 'Aaron Judge')"
-    ```
+**For command-line usage and examples, see [USAGE.md](USAGE.md).**
 
 ---
 
@@ -86,44 +70,7 @@ python auto_matchup.py "Gerrit Cole" "Aaron Judge"
 ```
 You should see probabilities printed at the end.
 
-### 5. How to use strategy analysis (Part C)
-
-The strategy script is `strategy_analysis.py`. It supports two modes:
-
-#### A) Sensitivity mode (one small pitch-mix shift)
-
-Use this to test one specific change, e.g. move 5% from fastballs to breaking balls:
-
-```sh
-python strategy_analysis.py sensitivity "Gerrit Cole" "Aaron Judge" --from fast --to break --step 5
-```
-
-What it does:
-- Runs baseline matchup probabilities
-- Applies one legal shift to pitch mix only (`P_FAST_PCT`, `P_BREAK_PCT`, `P_OFF_PCT`)
-- Re-runs PAT and prints the probability delta
-
-#### B) Optimize mode (search all legal pitch mixes)
-
-Use this to find the best pitch mix for pitcher win probability:
-
-```sh
-python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --step 5 --min-pct 5
-```
-
-What it does:
-- Runs baseline matchup probabilities
-- Tests all legal pitch mixes where:
-  - `fast + break + off = 100`
-  - each pitch type is at least `min-pct`
-  - values move in `step` increments
-- Prints all tested candidates and the best mix found
-
-Quick demo option (faster, fewer candidates):
-
-```sh
-python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --step 10 --min-pct 10
-```
+For strategy analysis and LLM agent usage, see [USAGE.md](USAGE.md).
 
 ---
 
@@ -478,3 +425,7 @@ Pitch type classification for model parameters:
 ---
 
 **For any questions or to extend the project, see the code comments in `data_parser.py` and `auto_update_pcsp.py`.**
+
+
+
+**For full CLI command reference, see [USAGE.md](USAGE.md).**
