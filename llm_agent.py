@@ -79,8 +79,8 @@ OUTPUT FORMAT — always a JSON object with these fields:
 Additional fields depending on combination:
 
   prediction + sensitivity:
-    "parameter": PCSP# param name (e.g. "P_FAST_ZONE")
-    "delta":     signed int (e.g. 10 or -5)
+    "parameter": PCSP# param name (e.g. "P_FAST_PCT")
+    "delta":     signed int (e.g. 10 or -5; default to 5 if user doesn't specify)
 
   strategy + sensitivity:
     "from_pitch": pitch type to REDUCE  ("fast", "break", or "off")
@@ -146,6 +146,11 @@ User: "Should Cole throw fewer fastballs and more offspeed?"
 {"intent": "strategy", "analysis_type": "sensitivity",
  "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
  "from_pitch": "fast", "to_pitch": "off", "step": 5}
+
+User: "What if Cole increases his fastball usage against Judge?"
+{"intent": "prediction", "analysis_type": "sensitivity",
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "parameter": "P_FAST_PCT", "delta": 5}
 """
 
 
@@ -208,8 +213,9 @@ def _validate(tc: dict):
         "Must include pitcher and batter"
 
     if intent == "prediction" and analysis == "sensitivity":
-        assert "parameter" in tc and "delta" in tc, \
-            "prediction + sensitivity requires parameter and delta"
+        assert "parameter" in tc, \
+            "prediction + sensitivity requires parameter"
+        tc.setdefault("delta", 5)
     if intent == "strategy" and analysis == "sensitivity":
         assert "from_pitch" in tc and "to_pitch" in tc, \
             "strategy + sensitivity requires from_pitch and to_pitch"
