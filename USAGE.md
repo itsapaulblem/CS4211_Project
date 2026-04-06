@@ -26,6 +26,38 @@ python llm_agent.py "What is the probability Cole gets Judge out?"
 
 ---
 
+## Caching Matchup Data
+
+By default, every run fetches live data from the Statcast API. Since API data can change between runs (even for past seasons), results may not be reproducible.
+
+To lock in a set of parameters for consistent results:
+
+**Step 1: Export the matchup once:**
+
+```sh
+python -c "from data_parser import export_matchup_json; export_matchup_json('Gerrit Cole', 'Aaron Judge')"
+```
+
+This saves parameters to `data/matchup.json`.
+
+**Step 2: Use cached data in subsequent runs:**
+
+```sh
+# auto_matchup
+python auto_matchup.py "Gerrit Cole" "Aaron Judge" --use-cached
+
+# strategy analysis
+python strategy_analysis.py sensitivity "Gerrit Cole" "Aaron Judge" --from fast --to break --use-cached
+python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --use-cached
+
+# LLM agent (automatically uses data/matchup.json if it exists)
+python llm_agent.py "What is the probability Cole gets Judge out?"
+```
+
+To refresh the data (re-fetch from Statcast), either delete `data/matchup.json` or run the export command again.
+
+---
+
 ## `auto_matchup.py` — Single Matchup
 
 Generates `matchup.pcsp` from real Statcast data and runs PAT once. The simplest way to get win probabilities.

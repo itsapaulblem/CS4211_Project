@@ -29,7 +29,7 @@ import re
 import sys
 
 from dotenv import load_dotenv
-from data_parser import get_matchup
+from data_parser import get_matchup, load_matchup_json
 from strategy_analysis import (
     run_pat_on_matchup,
     run_sensitivity_analysis,
@@ -37,6 +37,8 @@ from strategy_analysis import (
     format_sensitivity_result,
     format_optimization_result,
 )
+
+CACHE_PATH = "data/matchup.json"
 
 load_dotenv()
 
@@ -146,22 +148,7 @@ User: "Should Cole throw fewer fastballs and more offspeed?"
 # ============================================================================
 
 def call_llm(user_query: str) -> dict:
-    """Send query to LLM, get structured JSON classification."""
-
-    # ----- OPTION A: OpenAI -----
-    # from openai import OpenAI
-    # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    # resp = client.chat.completions.create(
-    #     model="gpt-4o",
-    #     messages=[
-    #         {"role": "system", "content": SYSTEM_PROMPT},
-    #         {"role": "user", "content": user_query},
-    #     ],
-    #     temperature=0,
-    # )
-    # raw = resp.choices[0].message.content
-
-    # ----- OPTION B: Google Gemini -----
+    """Send query to Gemini, get structured JSON classification."""
     import google.generativeai as genai
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
     model = genai.GenerativeModel(
@@ -170,9 +157,6 @@ def call_llm(user_query: str) -> dict:
     )
     raw = model.generate_content(user_query).text
 
-    # ----- MOCK (testing without API key) -----
-    # raw = _mock_llm(user_query)
-
     raw = raw.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
@@ -180,47 +164,6 @@ def call_llm(user_query: str) -> dict:
     tool_call = json.loads(raw)
     _validate(tool_call)
     return tool_call
-
-
-def _mock_llm(query: str) -> str:
-    """Regex-based mock for testing without an API key."""
-    q = query.lower()
-    pitcher = "Gerrit Cole"
-    batter = "Aaron Judge"
-
-    if any(re.search(kw, q) for kw in [
-        r"optimal", r"best.*mix", r"optimize",
-    ]):
-        return json.dumps({
-            "intent": "strategy", "analysis_type": "optimize",
-            "pitcher": pitcher, "batter": batter,
-            "step": 5, "min_pct": 5,
-        })
-
-    if any(re.search(kw, q) for kw in [
-        r"should.*throw", r"how should", r"more breaking",
-        r"more fastball", r"fewer",
-    ]):
-        return json.dumps({
-            "intent": "strategy", "analysis_type": "sensitivity",
-            "pitcher": pitcher, "batter": batter,
-            "from_pitch": "fast", "to_pitch": "break", "step": 5,
-        })
-
-    if any(re.search(kw, q) for kw in [
-        r"what happens if", r"what if.*improve", r"what if.*change",
-        r"what if.*increase", r"what if.*decrease", r"how much does",
-    ]):
-        return json.dumps({
-            "intent": "prediction", "analysis_type": "sensitivity",
-            "pitcher": pitcher, "batter": batter,
-            "parameter": "P_FAST_ZONE", "delta": 10,
-        })
-
-    return json.dumps({
-        "intent": "prediction", "analysis_type": "reachability",
-        "pitcher": pitcher, "batter": batter,
-    })
 
 
 def _validate(tc: dict):
@@ -319,10 +262,17 @@ def execute_tool(tc: dict) -> dict:
     return _prediction_reachability(pitcher, batter)
 
 
+def _load_stats(pitcher: str, batter: str) -> dict:
+    """Load matchup stats from cache if available, otherwise fetch live."""
+    if os.path.exists(CACHE_PATH):
+        return load_matchup_json(CACHE_PATH)
+    print(f"[Data] Fetching stats: {pitcher} vs {batter}")
+    return get_matchup(pitcher, batter)
+
+
 def _prediction_reachability(pitcher: str, batter: str) -> dict:
     """Single PAT run → return win probabilities."""
-    print(f"[Data] Fetching stats: {pitcher} vs {batter}")
-    stats = get_matchup(pitcher, batter)
+    stats = _load_stats(pitcher, batter)
     result = run_pat_on_matchup(stats)
     return {
         "type": "reachability",
@@ -336,8 +286,7 @@ def _prediction_reachability(pitcher: str, batter: str) -> dict:
 def _prediction_sensitivity(pitcher: str, batter: str,
                             parameter: str, delta: int) -> dict:
     """Two PAT runs: base vs one modified parameter."""
-    print(f"[Data] Fetching stats: {pitcher} vs {batter}")
-    stats = get_matchup(pitcher, batter)
+    stats = _load_stats(pitcher, batter)
 
     print("[PAT] Running baseline...")
     base_prob = run_pat_on_matchup(stats)["pitcherWinProb"]
@@ -369,13 +318,17 @@ def _strategy_sensitivity(pitcher: str, batter: str,
                           from_pitch: str, to_pitch: str,
                           step: int = 5) -> dict:
     """Pitch-mix shift analysis via strategy_analysis module."""
-    return run_sensitivity_analysis(pitcher, batter, from_pitch, to_pitch, step)
+    matchup = _load_stats(pitcher, batter)
+    return run_sensitivity_analysis(
+        pitcher, batter, from_pitch, to_pitch, step, matchup=matchup)
 
 
 def _strategy_optimize(pitcher: str, batter: str,
                        step: int = 5, min_pct: int = 5) -> dict:
     """Full pitch-mix optimisation sweep via strategy_analysis module."""
-    return run_optimization(pitcher, batter, step, min_pct)
+    matchup = _load_stats(pitcher, batter)
+    return run_optimization(
+        pitcher, batter, step, min_pct, matchup=matchup)
 
 
 # ============================================================================
