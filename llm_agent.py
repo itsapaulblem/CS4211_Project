@@ -97,24 +97,36 @@ THE 4 COMBINATIONS:
    → "What is the probability Cole gets Judge out?"
    Fields: pitcher, batter
 
-2. prediction + sensitivity
-   → "What if Cole's fastball command improves by 10%?"
+2. prediction + sensitivity  (ONE-SIDED pitch-mix OR any single parameter)
+   → User mentions only ONE pitch type to increase/decrease, OR a single
+     non-pitch-mix parameter (zone accuracy, swing rate, etc.).
+   → The system automatically adjusts complementary parameters
+     proportionally so group totals stay at 100.
    Fields: pitcher, batter, parameter, delta
 
-3. strategy + sensitivity
-   → "Should Cole throw more breaking balls against Judge?"
+3. strategy + sensitivity  (TWO-SIDED pitch-mix shift)
+   → User explicitly names BOTH a pitch type to reduce AND a pitch type
+     to increase (e.g. "decrease fastballs and increase breaking balls").
+   → Only use this when the user specifies BOTH directions.
    Fields: pitcher, batter, from_pitch, to_pitch, step
 
 4. strategy + optimize
    → "What is the optimal pitch mix for Cole against Judge?"
    Fields: pitcher, batter, step, min_pct
 
+CHOOSING BETWEEN #2 AND #3:
+- If the user mentions ONLY one pitch type direction (e.g. "throw MORE
+  breaking balls", "increase offspeed"), use prediction + sensitivity
+  with parameter = the corresponding P_*_PCT parameter.
+- If the user explicitly mentions BOTH directions (e.g. "decrease
+  fastballs AND increase breaking balls"), use strategy + sensitivity
+  with from_pitch and to_pitch.
+
 RULES:
 - NEVER guess probabilities. Always use a tool.
 - Output ONLY a valid JSON object. No markdown fences, no explanation.
 - Use FULL NAMES (e.g. "Gerrit Cole", not "Cole").
-- When the user asks about "more" of a pitch type, set to_pitch to that
-  type and from_pitch to a different one (usually "fast").
+- Default delta/step to 5 if the user does not specify a percentage.
 
 EXAMPLES:
 
@@ -123,6 +135,21 @@ User: "What is the probability Gerrit Cole gets Aaron Judge out?"
  "pitcher": "Gerrit Cole", "batter": "Aaron Judge"}
 
 User: "Should Cole throw more breaking balls against Judge?"
+{"intent": "prediction", "analysis_type": "sensitivity",
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "parameter": "P_BREAK_PCT", "delta": 5}
+
+User: "Should Cole increase breaking ball usage by 10% against Judge?"
+{"intent": "prediction", "analysis_type": "sensitivity",
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "parameter": "P_BREAK_PCT", "delta": 10}
+
+User: "Should Cole throw fewer fastballs and more offspeed?"
+{"intent": "strategy", "analysis_type": "sensitivity",
+ "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
+ "from_pitch": "fast", "to_pitch": "off", "step": 5}
+
+User: "Should Cole decrease fastballs and increase breaking balls by 5%?"
 {"intent": "strategy", "analysis_type": "sensitivity",
  "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
  "from_pitch": "fast", "to_pitch": "break", "step": 5}
@@ -141,11 +168,6 @@ User: "How much does a 5% decrease in Judge's chase rate help Cole?"
 {"intent": "prediction", "analysis_type": "sensitivity",
  "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
  "parameter": "B_BREAK_SWING", "delta": -5}
-
-User: "Should Cole throw fewer fastballs and more offspeed?"
-{"intent": "strategy", "analysis_type": "sensitivity",
- "pitcher": "Gerrit Cole", "batter": "Aaron Judge",
- "from_pitch": "fast", "to_pitch": "off", "step": 5}
 
 User: "What if Cole increases his fastball usage against Judge?"
 {"intent": "prediction", "analysis_type": "sensitivity",
@@ -315,9 +337,36 @@ def _prediction_sensitivity(pitcher: str, batter: str,
     old_val = modified[parameter]
     new_val = max(1, min(99, old_val + delta))
     modified[parameter] = new_val
+
+    snapshot_before = {k: modified[k] for k in modified}
     _fix_complements(parameter, modified, old_val, new_val)
 
-    print(f"[PAT] Running with {parameter} {old_val} → {new_val}...")
+    complement_members = []
+    for _gname, members in COMPLEMENT_GROUPS.items():
+        if parameter in members:
+            complement_members = [m for m in members if m != parameter]
+            break
+
+    adjustments = {}
+    for k in complement_members:
+        adjustments[k] = (snapshot_before[k], modified[k])
+
+    if complement_members:
+        print(f"\n    [Auto-adjust] {parameter}: {old_val} → {new_val} "
+              f"({delta:+d})")
+        print(f"    Complementary parameters proportionally adjusted:")
+        for k, (before, after) in adjustments.items():
+            diff = after - before
+            if diff == 0:
+                print(f"      {k}: {before} → {after} "
+                      f"(unchanged — share too small to shift)")
+            else:
+                print(f"      {k}: {before} → {after} ({diff:+d})")
+    else:
+        print(f"\n    [Adjust] {parameter}: {old_val} → {new_val} "
+              f"({delta:+d})")
+
+    print(f"\n[PAT] Running with {parameter} {old_val} → {new_val}...")
     mod_prob = run_pat_on_matchup(modified)["pitcherWinProb"]
 
     return {
@@ -328,6 +377,9 @@ def _prediction_sensitivity(pitcher: str, batter: str,
         "delta": delta,
         "old_value": old_val,
         "new_value": new_val,
+        "adjustments": {k: {"from": v[0], "to": v[1]}
+                        for k, v in adjustments.items()
+                        if v[0] != v[1]},
         "base_pitcherWinProb": round(base_prob, 5),
         "modified_pitcherWinProb": round(mod_prob, 5),
         "change": round(mod_prob - base_prob, 5),
@@ -402,6 +454,16 @@ def _template_synthesis(tc: dict, result: dict) -> str:
                     .replace("P_", "").replace("B_", "")
                     .replace("_", " ").lower())
         change = result["change"]
+        adj = result.get("adjustments", {})
+        adj_text = ""
+        if adj:
+            parts = []
+            for k, v in adj.items():
+                name = (k.replace("P_", "").replace("B_", "")
+                        .replace("_", " ").lower())
+                parts.append(f"{name} {v['from']} → {v['to']}")
+            adj_text = (f" Complementary parameters adjusted "
+                        f"proportionally: {', '.join(parts)}.")
         return (
             f"If {readable} changes by {result['delta']:+d} points "
             f"({result['old_value']} → {result['new_value']}): "
@@ -409,6 +471,7 @@ def _template_synthesis(tc: dict, result: dict) -> str:
             f"{result['base_pitcherWinProb']:.1%} to "
             f"{result['modified_pitcherWinProb']:.1%} "
             f"({'+' if change > 0 else ''}{change:.2%})."
+            f"{adj_text}"
         )
 
     if mode == "sensitivity":
@@ -436,13 +499,27 @@ def run_agent(user_query: str) -> str:
     print(f"    analysis_type: {tc['analysis_type']}")
     print(f"    pitcher:       {tc['pitcher']}")
     print(f"    batter:        {tc['batter']}")
+
+    query_lower = user_query.lower()
+    has_user_pct = bool(re.search(r'\d+\s*%', query_lower))
+
     if "parameter" in tc:
         print(f"    parameter:     {tc['parameter']}")
-        print(f"    delta:         {tc['delta']}")
+        delta_val = tc['delta']
+        if not has_user_pct:
+            print(f"    delta:         {delta_val}  "
+                  f"(default — no % specified in query)")
+        else:
+            print(f"    delta:         {delta_val}")
     if "from_pitch" in tc:
         print(f"    from_pitch:    {tc['from_pitch']}")
         print(f"    to_pitch:      {tc['to_pitch']}")
-        print(f"    step:          {tc.get('step', 5)}")
+        step_val = tc.get('step', 5)
+        if not has_user_pct:
+            print(f"    step:          {step_val}  "
+                  f"(default — no % specified in query)")
+        else:
+            print(f"    step:          {step_val}")
     if tc.get("analysis_type") == "optimize":
         print(f"    step:          {tc.get('step', 5)}")
         print(f"    min_pct:       {tc.get('min_pct', 5)}")
