@@ -163,21 +163,6 @@ def call_llm(user_query: str) -> dict:
     Send query to LLM, get structured JSON.
     Uncomment your preferred API below.
     """
-
-    # ----- OPTION A: OpenAI -----
-    # from openai import OpenAI
-    # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    # resp = client.chat.completions.create(
-    #     model="gpt-4o",
-    #     messages=[
-    #         {"role": "system", "content": SYSTEM_PROMPT},
-    #         {"role": "user", "content": user_query},
-    #     ],
-    #     temperature=0,
-    # )
-    # raw = resp.choices[0].message.content
-
-    # ----- OPTION B: Google Gemini -----
     from google import genai
 
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
