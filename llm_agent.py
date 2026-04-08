@@ -28,14 +28,13 @@ Requirements:
 """
 
 from google.genai import types
-from data_parser import get_matchup
 import json
 import os
 import re
 import sys
 
 from dotenv import load_dotenv
-from data_parser import get_matchup, load_matchup_json
+from data_parser import get_matchup
 from strategy_analysis import (
     run_pat_on_matchup,
     run_sensitivity_analysis,
@@ -80,7 +79,8 @@ Additional fields depending on combination:
 
   prediction + sensitivity:
     "parameter": PCSP# param name (e.g. "P_FAST_PCT")
-    "delta":     signed int (e.g. 10 or -5; default to 5 if user doesn't specify)
+    "delta":     signed int (e.g. 10 or -5; default to 5 if user
+                 doesn't specify)
 
   strategy + sensitivity:
     "from_pitch": pitch type to REDUCE  ("fast", "break", or "off")
@@ -215,7 +215,8 @@ def _validate(tc: dict):
     assert intent in ("prediction", "strategy"), \
         f"intent must be prediction|strategy, got {intent}"
     assert analysis in ("reachability", "sensitivity", "optimize"), \
-        f"analysis_type must be reachability|sensitivity|optimize, got {analysis}"
+        (f"analysis_type must be reachability|sensitivity|optimize, "
+         f"got {analysis}")
     assert "pitcher" in tc and "batter" in tc, \
         "Must include pitcher and batter"
 
@@ -250,7 +251,8 @@ COMPLEMENT_GROUPS = {
 
 
 def _fix_complements(param_name: str, stats: dict, old_val: int, new_val: int):
-    """After changing one parameter, adjust its complement group to keep sum = 100."""
+    """After changing one parameter, adjust its complement group to keep
+    sum = 100."""
     for _group_name, members in COMPLEMENT_GROUPS.items():
         if param_name in members:
             others = [m for m in members if m != param_name]
@@ -305,9 +307,6 @@ def execute_tool(tc: dict) -> dict:
 
 
 def _load_stats(pitcher: str, batter: str) -> dict:
-    """Load matchup stats from cache if available, otherwise fetch live."""
-    if os.path.exists(CACHE_PATH):
-        return load_matchup_json(CACHE_PATH)
     print(f"[Data] Fetching stats: {pitcher} vs {batter}")
     return get_matchup(pitcher, batter)
 
@@ -354,7 +353,7 @@ def _prediction_sensitivity(pitcher: str, batter: str,
     if complement_members:
         print(f"\n    [Auto-adjust] {parameter}: {old_val} → {new_val} "
               f"({delta:+d})")
-        print(f"    Complementary parameters proportionally adjusted:")
+        print("    Complementary parameters proportionally adjusted:")
         for k, (before, after) in adjustments.items():
             diff = after - before
             if diff == 0:
@@ -410,15 +409,17 @@ def _strategy_optimize(pitcher: str, batter: str,
 SYNTHESIS_PROMPT = (
     "You are a baseball coach explaining formal model-checking results to a "
     "player or manager. Provide a clear 3-5 sentence summary using plain "
-    "baseball language. Include the exact probabilities from the data — do NOT "
-    "round or change any numbers. Give actionable advice where applicable.\n\n"
+    "baseball language. Include the exact probabilities from the data — "
+    "do NOT round or change any numbers. Give actionable advice where "
+    "applicable.\n\n"
     "User question: {query}\n"
     "Analysis result:\n{result_json}\n"
 )
 
 
 def synthesize(user_query: str, tc: dict, result: dict) -> str:
-    """Turn raw results into coaching advice, using LLM with template fallback."""
+    """Turn raw results into coaching advice, using LLM with template
+    fallback."""
     try:
         import google.generativeai as genai
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
