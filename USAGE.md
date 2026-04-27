@@ -50,8 +50,11 @@ python auto_matchup.py "Gerrit Cole" "Aaron Judge" --use-cached
 python strategy_analysis.py sensitivity "Gerrit Cole" "Aaron Judge" --from fast --to break --use-cached
 python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --use-cached
 
-# LLM agent (automatically uses data/matchup.json if it exists)
+# LLM agent
+# By default, this fetches matchup data through data_parser.py.
 python llm_agent.py "What is the probability Cole gets Judge out?"
+
+Note: `auto_matchup.py` and `strategy_analysis.py` support `--use-cached`. The LLM agent uses the data-loading behaviour implemented in `llm_agent.py`; unless modified to load `data/matchup.json`, it fetches data through `data_parser.py`.
 ```
 
 To refresh the data (re-fetch from Statcast), either delete `data/matchup.json` or run the export command again.
@@ -127,7 +130,7 @@ python strategy_analysis.py optimize "Pitcher" "Batter" [--step N] [--min-pct N]
 | `--min-pct` | No | 5 | Minimum percentage each pitch type must have |
 
 ```sh
-# Standard sweep (step=5, min=5) — tests ~171 combinations
+# Standard sweep (step=5, min=5) — tests 171 combinations
 python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge"
 
 # Fast demo (step=10, min=10) — tests ~36 combinations
@@ -149,7 +152,7 @@ python strategy_analysis.py optimize "Gerrit Cole" "Aaron Judge" --step 5 --min-
 |----------|-------------|------------|-------|
 | 10 | 10 | ~36 | Fast (~2 min) |
 | 5 | 10 | ~66 | Moderate (~4 min) |
-| 5 | 5 | ~171 | Moderate (~10 min) |
+| 5 | 5 | 171 | Moderate (~10 min) |
 | 1 | 5 | ~4186 | Slow (~3+ hours) |
 
 ---
@@ -169,8 +172,8 @@ Four types of queries are supported:
 | Query type | Example | What happens |
 |---|---|---|
 | **Prediction** | "What is the probability Cole gets Judge out?" | 1 PAT run |
-| **What-if (proportional)** | "What if Cole increases fastballs by 5%?" | 2 PAT runs — proportionally adjusts the rest |
-| **What-if (explicit shift)** | "What if Cole shifts 5% from fastballs to breaking balls?" | 2 PAT runs — shifts between two specific types |
+| **Sensitivity: one-sided proportional adjustment** | "What if Cole increases fastballs by 5%?" | 2 PAT runs — proportionally adjusts the rest |
+| **Sensitivity: explicit pitch-mix shift** | "What if Cole shifts 5% from fastballs to breaking balls?" | 2 PAT runs — shifts between two specific types |
 | **Optimal mix** | "What is the optimal pitch mix for Cole against Judge?" | N PAT runs — full grid sweep |
 
 ### Prediction queries (1 PAT run)
@@ -183,7 +186,7 @@ python llm_agent.py "Who wins the Cole vs Judge at-bat?"
 python llm_agent.py "What are the win odds for Spencer Strider against Mookie Betts?"
 ```
 
-### What-if queries — proportional adjustment (2 PAT runs)
+### Sensitivity queries — one-sided proportional adjustment (2 PAT runs)
 
 Specify only the pitch type to change. The agent **proportionally adjusts the remaining types** to keep the mix summing to 100. For example, increasing fastballs by 5% will proportionally decrease both breaking balls and offspeed.
 
@@ -194,7 +197,7 @@ python llm_agent.py "What if Cole throws 10% more breaking balls against Judge?"
 python llm_agent.py "What if Cole reduces his offspeed usage against Judge?" # Without specifying %
 ```
 
-### What-if queries — explicit shift (2 PAT runs)
+### Sensitivity queries — explicit shift (2 PAT runs)
 
 Specify **both** the pitch type to increase and the one to decrease. This shifts percentage points between exactly two types, leaving the third unchanged. Delegates to `strategy_analysis.py` sensitivity mode.
 
